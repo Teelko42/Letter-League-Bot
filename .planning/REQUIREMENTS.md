@@ -69,31 +69,31 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WENG-01 | — | Pending |
-| WENG-02 | — | Pending |
-| WENG-03 | — | Pending |
-| WENG-04 | — | Pending |
-| WENG-05 | — | Pending |
-| VISN-01 | — | Pending |
-| VISN-02 | — | Pending |
-| VISN-03 | — | Pending |
-| VISN-04 | — | Pending |
-| DIFF-01 | — | Pending |
-| DIFF-02 | — | Pending |
-| DIFF-03 | — | Pending |
-| DISC-01 | — | Pending |
-| DISC-02 | — | Pending |
-| DISC-03 | — | Pending |
-| DISC-04 | — | Pending |
-| AUTO-01 | — | Pending |
-| AUTO-02 | — | Pending |
-| AUTO-03 | — | Pending |
+| WENG-01 | Phase 1 | Pending |
+| WENG-02 | Phase 1 | Pending |
+| WENG-03 | Phase 1 | Pending |
+| WENG-04 | Phase 1 | Pending |
+| WENG-05 | Phase 1 | Pending |
+| VISN-01 | Phase 3 | Pending |
+| VISN-02 | Phase 3 | Pending |
+| VISN-03 | Phase 3 | Pending |
+| VISN-04 | Phase 3 | Pending |
+| DIFF-01 | Phase 2 | Pending |
+| DIFF-02 | Phase 2 | Pending |
+| DIFF-03 | Phase 2 | Pending |
+| DISC-01 | Phase 4 | Pending |
+| DISC-02 | Phase 4 | Pending |
+| DISC-03 | Phase 4 | Pending |
+| DISC-04 | Phase 4 | Pending |
+| AUTO-01 | Phase 5 | Pending |
+| AUTO-02 | Phase 6 | Pending |
+| AUTO-03 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19 ⚠️
+- Mapped to phases: 19
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-23*
-*Last updated: 2026-03-23 after initial definition*
+*Last updated: 2026-03-23 after roadmap creation*

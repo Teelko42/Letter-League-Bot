@@ -11,8 +11,8 @@ Requirements for milestone v1.1: Vision + Discord Integration. Each maps to road
 
 - [ ] **VISN-01**: User can submit a Letter League screenshot and receive a structured board state extraction (grid cells, letters, positions)
 - [ ] **VISN-02**: User's tile rack is extracted from the screenshot alongside the board
-- [ ] **VISN-03**: Multiplier squares (DL/TL/DW/TW) are detected and mapped to board positions
-- [ ] **VISN-04**: Screenshots are cropped to the board region and upscaled before API processing for accuracy
+- [x] **VISN-03**: Multiplier squares (DL/TL/DW/TW) are detected and mapped to board positions
+- [x] **VISN-04**: Screenshots are cropped to the board region and upscaled before API processing for accuracy
 - [ ] **VISN-05**: Extracted board state is validated against engine constraints before being passed to the word engine
 
 ### Discord Bot
@@ -75,8 +75,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | VISN-01 | Phase 3 | Pending |
 | VISN-02 | Phase 3 | Pending |
-| VISN-03 | Phase 3 | Pending |
-| VISN-04 | Phase 3 | Pending |
+| VISN-03 | Phase 3 | Complete |
+| VISN-04 | Phase 3 | Complete |
 | VISN-05 | Phase 3 | Pending |
 | DISC-01 | Phase 4 | Pending |
 | DISC-02 | Phase 4 | Pending |

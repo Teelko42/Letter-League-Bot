@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Vision + Discord Integration
-status: active
-last_updated: "2026-03-24"
+status: unknown
+last_updated: "2026-03-24T21:47:31.838Z"
 progress:
-  total_phases: 4
+  total_phases: 1
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
 ---
 
 # Project State
@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-03-24)
 ## Current Position
 
 Phase: 3 of 6 (Vision Pipeline)
-Plan: — of ?
-Status: Ready to plan
-Last activity: 2026-03-24 — v1.1 roadmap created (Phases 3-6)
+Plan: 1 of 2 complete
+Status: In Progress
+Last activity: 2026-03-24 — 03-01 complete (vision foundation: errors, schema, preprocessor)
 
-Progress: [░░░░░░░░░░] 0% (0/? plans complete across v1.1)
+Progress: [█░░░░░░░░░] 10% (1/2 plans complete in Phase 3)
 
 ## Performance Metrics
 
@@ -45,6 +45,12 @@ Progress: [░░░░░░░░░░] 0% (0/? plans complete across v1.1)
 
 *v1.1 metrics will populate as plans complete.*
 
+**v1.1 Phase 3 (Vision Pipeline):**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| 03-01 Vision Foundation | 3 min | 3 | 6 |
+
 ## Accumulated Context
 
 ### Decisions
@@ -58,6 +64,8 @@ Recent decisions affecting v1.1:
 - Recommended model: `claude-sonnet-4-6` (~$0.004/screenshot); do not use Haiku 3 (retires 2026-04-19)
 - Wrap all engine calls with `asyncio.to_thread()` in Discord handlers — engine is CPU-bound sync code
 - Always `await interaction.response.defer()` as first line of `/analyze` handler — vision API takes 4-15s
+- [Phase 03-vision-pipeline]: opencv-python, Pillow, numpy installed (were listed in STACK.md but not installed in Python 3.10.4 env)
+- [Phase 03-vision-pipeline]: OFFICIAL_MULTIPLIER_LAYOUT HSV calibration deferred — initial estimates hardcoded with TODO comment for empirical calibration against real screenshots
 
 ### Pending Todos
 
@@ -73,5 +81,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Roadmap created for v1.1 — Phases 3-6 defined, ready to plan Phase 3
+Stopped at: Completed 03-vision-pipeline-01-PLAN.md (vision foundation)
 Resume file: None

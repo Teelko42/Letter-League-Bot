@@ -46,7 +46,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Setting difficulty to 0% returns a measurably weaker move than 100% on the same board
   3. At lower difficulties, the selected word is drawn from more common vocabulary than at 100%
   4. Difficulty setting is configurable as a numeric percentage without code changes
-**Plans**: TBD
+**Plans:** 2 plans
+  - [ ] 02-01-PLAN.md -- Word frequency foundation (FrequencyIndex + wordfreq integration)
+  - [ ] 02-02-PLAN.md -- DifficultyEngine blended score selection + integration tests
 
 ### Phase 3: Vision Pipeline
 **Goal**: The bot can reliably extract a complete, validated board state from a Letter League screenshot
@@ -98,7 +100,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Word Engine | 4/4 | Complete | 2026-03-24 |
-| 2. Difficulty System | 0/? | Not started | - |
+| 2. Difficulty System | 0/2 | Planned | - |
 | 3. Vision Pipeline | 0/? | Not started | - |
 | 4. Discord Advisor Mode | 0/? | Not started | - |
 | 5. Browser Automation Foundation | 0/? | Not started | - |

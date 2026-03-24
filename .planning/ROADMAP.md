@@ -47,7 +47,9 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full details.
   2. The tile rack contents are correctly extracted from the screenshot alongside the board in a single API call
   3. All multiplier square types (DL, TL, DW, TW) are detected and mapped to their correct grid coordinates
   4. Screenshots are cropped to the board region and upscaled before API submission, and the resulting board state passes engine validation before being handed off to the word engine
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 03-01-PLAN.md — Schema, errors, multiplier layout, and image preprocessor
+- [ ] 03-02-PLAN.md — Vision extractor, validator, and pipeline entry point
 
 ### Phase 4: Discord Advisor Mode
 **Goal**: A user can submit a screenshot to the Discord bot and receive actionable word recommendations as an ephemeral message
@@ -89,7 +91,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|-----------|----------------|--------|-----------|
 | 1. Word Engine | v1.0 | 4/4 | Complete | 2026-03-24 |
 | 2. Difficulty System | v1.0 | 2/2 | Complete | 2026-03-24 |
-| 3. Vision Pipeline | v1.1 | 0/? | Not started | - |
+| 3. Vision Pipeline | v1.1 | 0/2 | Planned | - |
 | 4. Discord Advisor Mode | v1.1 | 0/? | Not started | - |
 | 5. Browser Automation Foundation | v1.1 | 0/? | Not started | - |
 | 6. Autonomous Play | v1.1 | 0/? | Not started | - |

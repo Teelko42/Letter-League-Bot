@@ -112,6 +112,14 @@ None — no external service configuration required.
 - compute_cross_checks requires a GADDAG instance — plan 01-04 will call this during move generation setup
 - No blockers for plan 01-03 (scoring engine)
 
+## Self-Check: PASSED
+
+- FOUND: src/engine/board.py
+- FOUND: tests/test_board.py
+- FOUND: .planning/phases/01-word-engine/01-02-SUMMARY.md
+- FOUND: commit ab67542
+- 20/20 tests passing
+
 ---
 *Phase: 01-word-engine*
 *Completed: 2026-03-24*

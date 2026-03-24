@@ -11,8 +11,8 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **WENG-01**: Build GADDAG data structure from Wordnik wordlist for fast word lookup
 - [ ] **WENG-02**: Generate all valid word placements given board state and tile rack
-- [ ] **WENG-03**: Score words using Classic mode rules (letter values + multiplier squares, bonuses apply only on placement turn)
-- [ ] **WENG-04**: Score words using Wild mode rules (multipliers permanently assigned to letters)
+- [x] **WENG-03**: Score words using Classic mode rules (letter values + multiplier squares, bonuses apply only on placement turn)
+- [x] **WENG-04**: Score words using Wild mode rules (multipliers permanently assigned to letters)
 - [ ] **WENG-05**: Select optimal move (highest-scoring valid placement)
 
 ### Board Vision
@@ -71,8 +71,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | WENG-01 | Phase 1 | Complete (01-01) |
 | WENG-02 | Phase 1 | Pending |
-| WENG-03 | Phase 1 | Pending |
-| WENG-04 | Phase 1 | Pending |
+| WENG-03 | Phase 1 | Complete (01-03) |
+| WENG-04 | Phase 1 | Complete (01-03) |
 | WENG-05 | Phase 1 | Pending |
 | VISN-01 | Phase 3 | Pending |
 | VISN-02 | Phase 3 | Pending |
@@ -96,4 +96,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-23*
-*Last updated: 2026-03-24 — WENG-01 complete (01-01-PLAN.md)*
+*Last updated: 2026-03-24 — WENG-03, WENG-04 complete (01-03-PLAN.md)*

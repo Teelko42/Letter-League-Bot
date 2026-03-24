@@ -73,29 +73,29 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VISN-01 | — | Pending |
-| VISN-02 | — | Pending |
-| VISN-03 | — | Pending |
-| VISN-04 | — | Pending |
-| VISN-05 | — | Pending |
-| DISC-01 | — | Pending |
-| DISC-02 | — | Pending |
-| DISC-03 | — | Pending |
-| DISC-04 | — | Pending |
-| DISC-05 | — | Pending |
-| DISC-06 | — | Pending |
-| AUTO-01 | — | Pending |
-| AUTO-02 | — | Pending |
-| AUTO-03 | — | Pending |
-| AUTO-04 | — | Pending |
-| AUTO-05 | — | Pending |
-| AUTO-06 | — | Pending |
+| VISN-01 | Phase 3 | Pending |
+| VISN-02 | Phase 3 | Pending |
+| VISN-03 | Phase 3 | Pending |
+| VISN-04 | Phase 3 | Pending |
+| VISN-05 | Phase 3 | Pending |
+| DISC-01 | Phase 4 | Pending |
+| DISC-02 | Phase 4 | Pending |
+| DISC-03 | Phase 4 | Pending |
+| DISC-04 | Phase 4 | Pending |
+| DISC-05 | Phase 4 | Pending |
+| DISC-06 | Phase 4 | Pending |
+| AUTO-01 | Phase 5 | Pending |
+| AUTO-02 | Phase 5 | Pending |
+| AUTO-03 | Phase 5 | Pending |
+| AUTO-04 | Phase 6 | Pending |
+| AUTO-05 | Phase 6 | Pending |
+| AUTO-06 | Phase 6 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 17 total
-- Mapped to phases: 0
-- Unmapped: 17 ⚠️
+- Mapped to phases: 17
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-03-24*
-*Last updated: 2026-03-24 after initial definition*
+*Last updated: 2026-03-24 — traceability table populated after roadmap creation*

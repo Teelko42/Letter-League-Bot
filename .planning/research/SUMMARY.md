@@ -1,204 +1,174 @@
 # Project Research Summary
 
-**Project:** Letter League Bot
-**Domain:** Discord word game AI bot (AI vision + browser automation + Scrabble-like move engine)
-**Researched:** 2026-03-23
-**Confidence:** MEDIUM
+**Project:** Letter League Bot v1.1 — Vision + Discord + Browser Automation
+**Domain:** Discord word game AI bot extending a shipped Python word engine
+**Researched:** 2026-03-24
+**Confidence:** HIGH (Vision pipeline, Discord integration, stack), MEDIUM (Playwright autonomous mode — live testing required)
 
 ## Executive Summary
 
-Letter League Bot is a Discord Activity assistant that combines three technically distinct domains: AI vision (to parse game board screenshots), Scrabble-like move generation (to find optimal word placements), and browser automation (to play autonomously). Experts building this type of product follow a strict layered architecture: Discord interactions stay in thin Cog wrappers, computation lives in an isolated pure-Python engine, and external I/O (vision API, browser) is confined to separate pipeline modules. The correct build order starts from the inside out — board data model, then dictionary/engine, then vision pipeline, then Discord integration, and only then autonomous play. Every prior implementation in the public space (vike256/Wordbot, 23f3000839/Letter_League_AI) stops well short of this project's full scope, meaning this bot has genuine differentiation room but also limited prior art to borrow from.
+Letter League Bot v1.1 adds three capability layers on top of a shipped, validated v1.0 word engine: a Claude Vision pipeline that reads board screenshots, a discord.py advisor bot that responds to user-submitted screenshots with move recommendations, and a Playwright-driven autonomous player that navigates Discord's web client to play games independently. All research converges on the same build order: vision pipeline first (highest risk, shared critical path), then the Discord advisor (closes the MVP loop with zero TOS risk), then browser automation infrastructure, then autonomous play (highest complexity, non-trivial TOS constraints). The v1.0 engine — GADDAG, move generation, scoring, difficulty — is untouched; all new code is additive.
 
-The recommended stack is Python 3.11 with discord.py 2.7.1, Playwright async for browser automation, and the Anthropic Claude Vision API for board reading. A custom GADDAG implementation against the Wordnik wordlist provides the move generation engine. This combination is the only way to support both advisor mode (screenshot upload → top moves) and autonomous mode (bot joins game and plays) without self-hosting an ML model or violating core async architecture constraints. The single largest technical risk is the vision pipeline: AI vision hallucination rates on custom game fonts, combined with Playwright's documented canvas screenshot bug in headless mode, make the board-reading layer the highest-uncertainty component in the entire system.
+The dominant risk in this milestone is not technical complexity but Discord's Terms of Service. Automating a user account to play Discord Activities ("self-bot") has been actively enforced since 2017, with bans accelerating through 2021-2023. There is no API path for bots to join Activities. The only viable autonomous mode approach is Playwright driving a dedicated, isolated throwaway Discord account in a browser. This is architecturally sound but carries a permanent account ban risk. The advisor mode carries zero TOS risk and delivers core value independently. Research unanimously recommends shipping advisor mode first and treating autonomous mode as a separate, documented-risk feature.
 
-The primary risk vector is the autonomous mode's reliance on browser automation of a Discord user account — this is a structural TOS grey area that cannot be fully eliminated. The mitigation is to use a dedicated throwaway account, maintain human-paced click timing, and keep the API bot and browser automation accounts strictly separate. Advisor mode carries zero TOS risk and should be built and validated first before autonomous mode is attempted.
-
----
+The remaining technical risk is vision accuracy. Letter League renders on an HTML5 canvas inside a cross-origin Discord Activity iframe. At typical Discord resolution, board tiles are 15-25px — below the 200px threshold where Claude Vision quality degrades. The mitigation is to crop and upscale the screenshot to the board region before sending to the API, and to gate the vision phase on achieving less than 2% per-tile error rate across 20 or more ground-truth screenshots before connecting vision output to the word engine.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The project requires Python 3.11 as the ecosystem sweet spot: OpenCV has no Python 3.13 wheels yet, pytest-asyncio requires 3.10+, and 3.11 provides measurable performance improvements over earlier versions. discord.py 2.7.1 is the mandated framework and is actively maintained with full slash command support. Playwright's async API (1.58.0) is non-negotiable for autonomous mode — the sync API cannot coexist with discord.py's event loop. Claude Vision via the anthropic SDK (0.86.0) outperforms open-source OCR alternatives on styled game screenshots without requiring custom model training.
+All v1.1 new dependencies are verified as of March 2026. The stack adds exactly three major libraries on top of the existing Python 3.11 environment: `discord.py 2.7.1` for bot gateway and slash commands, `anthropic 0.86.0` for the Claude Vision API client (use `AsyncAnthropic` — the sync client blocks discord.py's event loop), and `playwright 1.58.0` for browser automation (use `playwright.async_api` exclusively — the sync API raises a hard `RuntimeError` inside asyncio). Supporting libraries are `Pillow 12.1.1` for screenshot preprocessing, `opencv-python 4.13.0.92` for board grid detection, `aiosqlite 0.22.1` for async state persistence, and `loguru 0.7.3` for structured logging. On Windows (current dev environment), Playwright requires `ProactorEventLoop`, which Python 3.11 sets automatically — no manual configuration needed.
 
-The word engine departs from off-the-shelf libraries: a custom GADDAG built on the Wordnik wordlist is recommended because GADDAG is ~2x faster than DAWG for move generation, handles the board's anchor/hook structure correctly, and can be adapted for Letter League's 27x19 expandable board. Supporting infrastructure is standard: aiosqlite for session state persistence, loguru for structured logging, numpy for board array representation, and uv for dependency management.
+The recommended Claude model is `claude-sonnet-4-6` at approximately $0.004 per 1-megapixel board screenshot. Do not use Haiku 3 — it retires April 19, 2026. Downgrade to `claude-haiku-4-5` only after accuracy validation on real boards.
 
 **Core technologies:**
-- Python 3.11: runtime — ecosystem sweet spot, avoids 3.13 wheel gaps, best performance
-- discord.py 2.7.1: Discord framework — only maintained first-party Python Discord library
-- Playwright async 1.58.0: browser automation — only option that works inside discord.py's asyncio loop; native iframe support required for Discord Activities
-- anthropic SDK 0.86.0 (Claude Vision): board reading — outperforms Tesseract/EasyOCR on styled game screenshots without custom training
-- Custom GADDAG + Wordnik wordlist: move engine — 2x faster than DAWG for move generation; handles board expansion
-- OpenCV 4.13.0.92 + Pillow 12.1.1: image preprocessing — OpenCV finds tile boundaries, Claude reads content
-- aiosqlite 0.22.1: state persistence — non-blocking SQLite within discord.py's event loop
-- numpy 2.x: board representation — typed 2D array for 27x19+ grid operations
+- `discord.py 2.7.1`: Discord gateway, slash commands, attachment handling — only maintained first-party Python Discord library; v2.x has native `app_commands` and full asyncio integration
+- `anthropic 0.86.0`: Claude Vision API client — official SDK with type safety, retry logic, rate-limit handling; use `AsyncAnthropic` for non-blocking use in asyncio; model `claude-sonnet-4-6`
+- `playwright 1.58.0`: Chromium browser automation — superior to Selenium for modern SPAs; first-class async API; native `frame_locator()` for cross-origin iframe interaction; required for Discord Activity navigation
+- `Pillow 12.1.1`: Screenshot preprocessing — resize and crop before API calls to stay under 1568px and improve token efficiency
+- `opencv-python 4.13.0.92`: Board grid boundary detection — separates structural detection (OpenCV) from content reading (Claude Vision)
+- `aiosqlite 0.22.1`: Async SQLite for user difficulty persistence and session state — non-blocking within discord.py's event loop
 
 ### Expected Features
 
-Board state extraction is the foundational critical path: every other feature depends on reliably parsing a screenshot into a structured board representation. The GADDAG engine, slash commands, and scoring logic all depend on this working correctly first. Wild vs. Classic scoring modes diverge at the score-calculation level and must be designed in from the start — they cannot be retrofitted cleanly later.
+The feature dependency chain is strict: the vision pipeline must be complete before either the Discord advisor or autonomous mode can function. Vision is the shared critical path. Autonomous mode must not be built until advisor mode has been validated in real game sessions.
 
-**Must have (table stakes):**
-- Board state extraction via AI vision — without this, nothing works; highest-risk item
-- Tile rack extraction from screenshot — required alongside board extraction
-- GADDAG word finder with Wordnik dictionary — core move-generation engine
-- Classic mode scoring calculation — standard Scrabble behavior, required for advisor mode
-- `/analyze` slash command accepting screenshot attachment — standard Discord interaction pattern
-- Top 3 move suggestions with score and placement — minimum useful advisor output
-- Configurable difficulty % — primary differentiator; interpolate from worst to best valid move
+**Must have for v1.1 (P1 — advisor mode complete):**
+- Vision pipeline: grid + rack extraction from screenshot to structured JSON, with `BoardState` validation before engine handoff
+- Discord bot process with proper token auth, guild registration, slash command tree sync
+- `/analyze` slash command accepting `discord.Attachment`, returning top-3 move recommendations as an ephemeral response
+- `BoardState` JSON to `GameEngine` bridge (`session.sync_board()` rebuilding engine board from extracted state)
+- Error handling for bad screenshots, vision API failures, and zero-valid-moves cases
+- `/setdifficulty` command with Classic/Wild mode parameter
 
-**Should have (competitive):**
-- Wild mode scoring — permanent multiplier tracking; many players use this mode
-- Move explanation with score breakdown — teaches strategy, low implementation cost
-- Bingo detection flag — marks 7-tile plays, high user delight for low effort
-- In-session board state memory — avoids full re-parse on each turn within a game
+**Should have after advisor validation (P2):**
+- Score breakdown per component (requires minor `Scorer` touch to return a breakdown dict, not just total)
+- Per-user difficulty persistence (aiosqlite keyed on `user_id`)
+- Two-shot vision retry on parse failure
+- Region crop before API call (saves ~$0.002/call, improves accuracy)
+- Bingo callout for 7-tile plays
 
-**Defer (v2+):**
-- Autonomous play mode — highest complexity feature; Playwright + browser automation; build only after advisor is solid
-- Leave value / equity scoring — strategic tile retention; significantly more complex than raw score maximization
-- Monte Carlo lookahead — state-of-the-art Scrabble AI; overkill until autonomous mode is working
+**Defer to autonomous mode phase (P3):**
+- Playwright Chromium persistent session and Discord web login
+- Activity iframe screenshot capture and parsing (reuses the vision pipeline exactly)
+- Board pixel coordinate mapping (no DOM structure; pure visual grid detection)
+- Turn detection via visual state change
+- Rack tile and board cell click sequences for word placement
 
 ### Architecture Approach
 
-The architecture is strictly layered with clean boundaries. Discord Cogs are thin event translators only — no game logic lives in Cog methods. The engine package (board model, dictionary, move generator, scorer, difficulty filter) is pure Python with no I/O and no discord.py imports, making it fully unit-testable without a live bot. The vision package is isolated behind a single async function that accepts screenshot bytes and returns a `BoardState` dataclass — swapping VLM providers requires only changing `vision/extractor.py`. The automation package (Playwright lifecycle) is separate from the engine, so autonomous mode can be disabled without touching core logic. `BoardState` is an immutable frozen dataclass that serves as the single contract between all components.
+The architecture follows a strict layered pattern — "thin cog, fat engine" — where Discord Cogs contain only event wiring and formatting, with zero game logic. All logic lives in `src/` packages (`src/vision/`, `src/engine/`, `src/automation/`) that have no `discord.py` imports and are fully testable without a live bot connection. A `GameSession` per Discord channel holds the `GameEngine` instance (stateful across turns via `play_move()`), difficulty setting, and scoring mode. The `BoardState` dataclass (`src/vision/models.py`) is the explicit contract between the vision pipeline and the word engine: vision produces it, `session.sync_board()` applies it to the engine's board, and `engine.find_moves()` consumes the result.
 
 **Major components:**
-1. Discord Cog (bot/cogs/) — receives slash commands and image attachments; dispatches to pipelines; formats output
-2. Game Session Controller (bot/session.py) — owns mode state, difficulty setting; routes advisor vs. autonomous
-3. Vision Pipeline (vision/) — screenshot bytes → BoardState via Claude Vision API; includes validation
-4. Word Engine (engine/) — BoardState → ranked Move list; pure CPU, zero I/O; GADDAG + scorer + difficulty filter
-5. Browser Automation (automation/) — persistent Playwright Chromium context; canvas screenshot capture; tile placement clicks
-6. Persistent Session Store (aiosqlite) — per-user difficulty settings, game history, board state cache with TTL
+1. `src/vision/` (Phase 3) — `extractor.py` takes `bytes`, calls `anthropic.AsyncAnthropic().messages.parse()` with a Pydantic schema, returns typed `BoardState`; `models.py` defines `ExtractedCell` and `BoardState` dataclasses; `prompt.py` holds the structured extraction system prompt. No `discord.py` imports.
+2. `bot/` (Phase 4) — `main.py` sets up the bot with `message_content` privileged intent; `cogs/advisor.py` is the `/analyze` handler (always `defer()` before async work); `session.py` owns per-channel `GameEngine` + `DifficultyEngine` state. All Cog methods stay thin.
+3. `src/automation/` (Phase 5) — `browser.py` manages Playwright persistent context lifecycle; `navigator.py` navigates Discord to the Activity iframe using `frame_locator()`; `placer.py` clicks rack tiles and board squares using canvas-relative coordinates.
+4. `bot/cogs/autoplay.py` (Phase 6) — `discord.ext.tasks` background loop orchestrating the per-turn screenshot → vision → engine → click cycle; `/autoplay`, `/stop`, `/difficulty` commands.
 
 ### Critical Pitfalls
 
-1. **Playwright sync API inside discord.py** — use `playwright.async_api` exclusively throughout the project; `sync_playwright()` raises `RuntimeError: This event loop is already running` inside discord.py's asyncio loop; this is the most commonly hit integration bug
-2. **Canvas screenshot blank in headless Chromium** — Playwright has a documented bug (issue #19225) where canvas elements render blank in headless mode; validate canvas capture in headed mode first; fall back to JavaScript `canvas.toDataURL()` injection if needed
-3. **Vision LLM hallucination on ambiguous tiles** — VLMs hallucinate tile identities (I/l/1, O/0, W/M); add post-extraction validation (rack length 1-7, letters in A-Z set, grid dimensions within bounds); never propagate unvalidated VLM output to the move engine
-4. **Board state drift from accumulated errors** — do NOT accumulate delta updates across turns; always re-extract the full board each turn as the authoritative state; each turn's read supersedes the previous
-5. **TOS selfbot violation** — Discord's Activity player account must be a dedicated throwaway account, never a personal account; keep API bot and browser automation accounts strictly separate; use human-paced click timing
-
----
+1. **Playwright sync API inside discord.py** — raises `RuntimeError: This event loop is already running` and freezes the bot. Use `playwright.async_api` exclusively throughout the entire codebase. Verify in the browser automation foundation phase before any game logic is built on top.
+2. **Canvas screenshot blank in headless Chromium** — Letter League renders on an HTML5 canvas; headless mode captures blank output if the screenshot is taken before JavaScript compositing completes. Use `wait_for_load_state("networkidle")` plus a game-specific render signal. Fall back to `canvas.toDataURL()` JavaScript extraction if timing waits are insufficient.
+3. **Claude Vision hallucination on small tiles** — at typical Discord resolution, board tiles may be under the 200px quality threshold. Crop the screenshot to the board region and upscale before sending. Request structured Pydantic output (not plain text JSON) to guarantee schema compliance. Gate the vision phase on less than 2% per-tile error rate across 20+ ground-truth screenshots.
+4. **Discord interaction timeout** — the slash command acknowledgment window is 3 seconds; the vision API call takes 4-15 seconds. The first line of every handler doing async work must be `await interaction.response.defer()`. Use `interaction.followup.send()` after deferring — never `interaction.response.send_message()`.
+5. **Self-bot TOS violation** — automating a Discord user account violates Discord's Terms of Service and results in permanent account bans. Use a dedicated throwaway account for autonomous mode, document the risk explicitly in the setup guide, and build advisor mode first (zero TOS risk).
+6. **Word engine blocking the event loop** — the v1.0 GADDAG engine is synchronous and CPU-bound. Wrap all engine calls with `await asyncio.to_thread(engine_fn, *args)` in Discord handlers to avoid freezing the event loop and missing Discord heartbeats.
 
 ## Implications for Roadmap
 
-Based on research, the architecture's strict build-order dependency chain (board model → engine → vision → bot integration → automation) maps directly onto roadmap phases. Each phase must be complete and validated before the next begins — this is not a project where phases can overlap significantly.
+The v1.1 milestone continues phase numbering from v1.0 (which ended at Phase 2). The v1.0 engine (Phases 1-2) is complete and untouched. V1.1 adds four phases:
 
-### Phase 1: Project Foundation and Board Model
-**Rationale:** The `BoardState` and `Cell` dataclasses are the contract that every other component depends on. Establishing the data model, project structure, and development tooling first prevents costly interface changes later. Zero external dependencies.
-**Delivers:** Project scaffold, `engine/board.py` dataclasses, `config.py`, `.env` setup, uv lockfile, test infrastructure
-**Addresses:** Slash command interface foundation (discord.py Cog skeleton), scoring mode design (Wild vs. Classic must be in data model from the start)
-**Avoids:** Anti-pattern of putting game logic in Discord Cogs; hardcoding board dimensions (design for 27x19+ expandable from day one)
+### Phase 3: Vision Pipeline
+**Rationale:** The vision pipeline is the shared critical path for all v1.1 features. Both advisor and autonomous mode feed through the same `extract_board_state()` call. It is also the highest-risk item — small tile size, hallucination risk, canvas rendering. Gating everything else on a validated vision layer is the only defensible order.
+**Delivers:** `src/vision/` package — `BoardState` dataclass, structured extraction prompt, `extract_board_state(image_bytes) -> BoardState`, board sync path to existing `GameEngine`. Validated against 20+ ground-truth screenshots with less than 2% per-tile error rate before connecting to the engine.
+**Addresses:** Vision pipeline P1 features: grid extraction, rack extraction, multiplier square detection, output validation, graceful failure on bad screenshots.
+**Avoids:** Vision hallucination (crop + upscale + Pydantic schema + accuracy gate), board state drift (treat each read as authoritative, never delta-accumulate), `BoardState` contract mismatch (end-to-end integration test: screenshot → vision → engine → valid move list).
+**Research flag:** Needs research and iteration — accurate prompt engineering for structured board extraction has no public prior art for Letter League specifically. Plan for multiple prompt iterations against real screenshots.
 
-### Phase 2: Word Engine (Dictionary + Move Generation + Scoring)
-**Rationale:** The engine is pure Python with no I/O dependencies — it can be built and exhaustively tested without a Discord bot, browser, or vision API. This is the highest-complexity algorithmic component and the safest to build in isolation. All downstream phases depend on it being correct.
-**Delivers:** GADDAG loaded from Wordnik wordlist, anchor-based move generator, Classic and Wild mode scorer, percentile difficulty filter
-**Addresses:** Valid move generation (table stakes), highest-scoring move recommendation, Classic + Wild scoring, configurable difficulty %, bingo detection
-**Avoids:** Linear word search in Python list (O(n) unusable at 170k+ words); accumulating board state as deltas; building Trie instead of DAWG/GADDAG; using Wordnik list as a Python list for membership checks
-**Research flag:** Standard patterns from Appel-Jacobsen 1988 and Gordon 1994 — well-documented; skip phase-level research; unit-test difficulty scaling across 0/50/100% to verify measurable score differences
+### Phase 4: Discord Advisor Mode
+**Rationale:** Closes the MVP loop with zero TOS risk. Advisor mode is the primary value delivery for v1.1: users get move suggestions by uploading screenshots to Discord. No Playwright needed. Validates the entire vision-to-engine pipeline in real usage before any automation is built.
+**Delivers:** `bot/` package — `main.py`, `session.py`, `cogs/advisor.py`, `/analyze` slash command with ephemeral top-3 move response, `/setdifficulty` command, error handling for bad screenshots. Full end-to-end: user uploads screenshot → bot replies with best move.
+**Implements:** `GameSession` (per-channel stateful engine), `AdvisorCog` (thin Discord layer), Discord bot process (privileged `message_content` intent, slash command tree sync).
+**Avoids:** Interaction timeout (`defer()` as first line of every handler), event loop blocking (`asyncio.to_thread()` for engine calls), image validation gaps (check `content_type` and file size before processing).
+**Research flag:** Standard patterns — discord.py slash commands, attachment handling, and Cog structure are well-documented. No research-phase needed.
 
-### Phase 3: Vision Pipeline (Board Reading)
-**Rationale:** The vision pipeline is the highest-risk component in the project. It must be validated against real Letter League screenshots with ground-truth boards before connecting to the word engine. A hallucinating board reader will silently produce wrong moves with no error signal. Board-reading accuracy gates everything downstream.
-**Delivers:** `vision/extractor.py` with Claude Vision API integration, structured JSON prompt/schema, BoardState validation layer, Pillow/OpenCV preprocessing (crop to board region, enhance contrast)
-**Addresses:** Board state extraction (critical path table stake), tile rack extraction, multiplier square detection, error handling with actionable messages
-**Avoids:** Sending full 1920x1080 screenshots (inflates tokens, worsens accuracy — crop first); treating VLM output as ground truth without validation; missing multiplier square detection; confusing rack tiles with board tiles
-**Research flag:** Needs validation testing — measure per-tile error rate on 20+ ground-truth screenshots before proceeding; this phase has the highest uncertainty in the project
+### Phase 5: Browser Automation Foundation
+**Rationale:** Isolated engineering spike to validate that Playwright can navigate Discord's web client, reach a Letter League Activity iframe, and capture a non-blank canvas screenshot. This is the highest-uncertainty phase — no public prior art exists for Playwright + Discord Activities. Must be completed and validated before any game-playing logic is built on top.
+**Delivers:** `src/automation/browser.py` (persistent Playwright context lifecycle), `src/automation/navigator.py` (Discord login → voice channel → Activity iframe). Validation gate: non-blank screenshot of Letter League game canvas captured from within the iframe in headless mode.
+**Avoids:** Playwright sync API conflict (`async_playwright` throughout), headless canvas blank (wait strategy + `canvas.toDataURL()` fallback), iframe cross-origin blocking (`frame_locator()` scoped to correct iframe by URL pattern, validated empirically), account security (dedicated throwaway account, TOS risk documented before implementation begins).
+**Research flag:** Needs research and spiking — Discord Activity iframe structure is undocumented; exact selectors, canvas rendering timing, and headless compatibility all require live testing. Inspect the DOM in headed mode with DevTools before writing automation code.
 
-### Phase 4: Discord Advisor Mode Integration
-**Rationale:** This is the first end-to-end path and the MVP milestone. Vision pipeline + word engine + Discord slash command wired together. Advisor mode has zero TOS risk and delivers core user value independently of autonomous mode.
-**Delivers:** `/analyze` slash command, screenshot attachment ingestion, top-N move response formatting, in-Discord error messages, interaction deferral pattern
-**Addresses:** All P1 features from FEATURES.md; `/analyze` slash command; human-readable response formatting; Wild/Classic mode selection per call
-**Avoids:** 3-second interaction token timeout (always `defer()` immediately before async work); calling vision API synchronously in handler (use async client); sending raw unvalidated VLM output to users
-**Research flag:** Standard discord.py patterns — well-documented; no phase research needed
-
-### Phase 5: Enhanced Advisor Features (v1.x)
-**Rationale:** Once advisor mode is validated and users are engaged, add the differentiating polish features. These are low implementation cost against an already-working advisor foundation.
-**Delivers:** Move explanation with score breakdown, bingo detection flag, in-session board state memory (per channel/user with TTL), Wild mode if not completed in Phase 3
-**Addresses:** All P2 features from FEATURES.md; top-N alternatives; multi-turn session context
-**Avoids:** Stateful board accumulation across sessions (use TTL-based cache, not permanent state); leave value / equity scoring complexity (defer to v2)
-**Research flag:** Standard patterns; skip phase research
-
-### Phase 6: Browser Automation Foundation
-**Rationale:** Autonomous mode requires three separate validated capabilities — canvas screenshot capture, iframe interaction, and persistent session management — before any game logic is layered on. The Playwright canvas bug in headless mode is a critical unknown that must be resolved before building the game loop. Separate from the game logic to allow targeted debugging.
-**Delivers:** `automation/browser.py` persistent Chromium context, canvas screenshot validation (headed and headless), `automation/navigator.py` Discord Activity navigation, iframe access via `frame_locator()`
-**Addresses:** Browser automation infrastructure, persistent session (no re-auth per run), `.gitignore` for `browser_state/`
-**Avoids:** Playwright sync API (use async API throughout); re-launching browser every turn (launch once, keep open); iframe cross-origin blocking (use `frame_locator()` by URL pattern, not position); browser_state committed to git
-**Research flag:** Needs exploratory spiking — canvas screenshot bug resolution is unknown until tested against live Letter League; iframe URL pattern for frame_locator requires live investigation
-
-### Phase 7: Autonomous Play Mode
-**Rationale:** Highest-complexity feature. Requires all prior phases working. The TOS risk is highest here — design documentation and account separation must precede implementation. Layered on top of working advisor mode (vision + engine) with browser automation (Phase 6) completing the loop.
-**Delivers:** `/autoplay` and `/stop` slash commands, `automation/placer.py` tile placement click sequences, game loop with turn detection, end-of-game cleanup
-**Addresses:** P3 autonomous play feature; difficulty % scaling in autonomous context
-**Avoids:** Selfbot account ban (use dedicated throwaway account, human-paced delays, document TOS risk prominently); board state drift in long game loops (re-read full board each turn); hardcoded board coordinates (canvas coordinates relative to element bounding box, not viewport)
-**Research flag:** Highest-risk phase — needs live testing of click coordinate mapping for tile rack and board placement; turn-detection mechanism requires investigation of Letter League's UI signals; plan for the possibility that canvas interaction fails and a fallback approach is needed
+### Phase 6: Autonomous Play
+**Rationale:** Depends on all preceding phases. Requires a validated vision pipeline (Phase 3), a working advisor session model (Phase 4), and proven browser automation infrastructure (Phase 5). Build last; the integration is the combination of all prior work plus tile placement clicks.
+**Delivers:** `src/automation/placer.py` (rack tile + board cell click sequences using canvas-relative coordinates), `bot/cogs/autoplay.py` (`discord.ext.tasks` background game loop, `/autoplay`, `/stop`, `/difficulty` commands). Full autonomous flow: bot joins game, detects turn visually, places word, loops until game end.
+**Avoids:** Board state drift (full re-read each turn, consistency check against previous state), browser re-launching per turn (persistent context from Phase 5), frame reference caching across reconnects (re-acquire `frame_locator` each turn), self-bot TOS risk (dedicated throwaway account, human-paced timing jitter of 1-3s between tile clicks).
+**Research flag:** Needs research — tile placement coordinate mapping (pixel position of each board cell relative to canvas bounding box) must be derived from live visual grid detection or empirically measured. No public prior art for Letter League.
 
 ### Phase Ordering Rationale
 
-- **Engine before vision:** The word engine is pure Python and testable in isolation. Building it first means the most critical and complex algorithmic component has verified correctness before any visual data is piped through it.
-- **Vision before Discord:** Board reading is the project's highest-risk item. Validating it against real screenshots before wiring up Discord commands prevents building on an unreliable foundation.
-- **Advisor before autonomous:** All research sources agree on this order. Autonomous mode is advisor mode plus browser automation. Advisory mode is the correct MVP milestone and has zero TOS risk.
-- **Automation foundation before game loop:** The three Playwright unknowns (canvas in headless, iframe access, persistent session) must be resolved as isolated engineering problems before game logic is layered on top.
+- **Vision before everything else:** The shared `extract_board_state()` call is the dependency for both advisor and autonomous mode. Validating it independently (no Discord, no Playwright) is the safest path and gives the highest-confidence foundation.
+- **Advisor before autonomous:** Advisor mode is the lower-stakes validation environment for the vision-to-engine pipeline. Errors in advisor mode result in a wrong suggestion that the user can ignore; errors in autonomous mode result in the bot placing invalid tiles. The engine must be proven reliable before trusting it to click.
+- **Browser automation before autonomous play:** Phase 5 is a pure infrastructure spike. Mixing game-playing logic into an unvalidated automation layer adds debugging surface area. The three Playwright unknowns (canvas in headless, iframe access, persistent session) must be resolved in isolation.
+- **Autonomous play last:** It depends on all three prior phases and introduces the TOS risk. Deferring it last ensures the project delivers value even if autonomous mode proves infeasible or too risky.
 
 ### Research Flags
 
-Phases likely needing deeper research or spiking during planning:
-- **Phase 3 (Vision Pipeline):** Accuracy of Claude Vision on Letter League's specific tile font and color scheme is unknown until tested. Multiplier square visual differentiation and rack vs. board tile separation need empirical validation. Plan for iteration.
-- **Phase 6 (Browser Automation Foundation):** Playwright canvas screenshot bug resolution on the specific Letter League canvas element is unknown. The iframe URL pattern for `frame_locator()` requires live investigation. This phase should begin with a time-boxed spike.
-- **Phase 7 (Autonomous Play):** Tile placement coordinate mapping, turn-detection UI signals, and the overall reliability of headless click automation all require live testing against a real game. Budget for significant iteration.
+Phases needing deeper research or live spiking during planning:
+- **Phase 3 (Vision Pipeline):** Prompt engineering for structured board extraction requires iteration on real Letter League screenshots. The 27x19 grid with Wild mode color coding has no public prior art. Test accuracy early and gate phase completion on the error rate target.
+- **Phase 5 (Browser Automation Foundation):** Discord Activity iframe selectors, canvas rendering timing in headless Chromium, and anti-automation detection behavior are all undocumented. Treat as an exploratory spike. Empirically inspect the DOM in headed mode before writing any automation code.
+- **Phase 6 (Autonomous Play):** Board cell pixel coordinate mapping from canvas bounding box has no reference implementation for Letter League. Requires live measurement or visual grid detection at game start. Budget for significant iteration.
 
-Phases with standard patterns (skip phase-level research):
-- **Phase 1 (Foundation):** discord.py project structure is well-documented; uv tooling is standard.
-- **Phase 2 (Word Engine):** GADDAG and Appel-Jacobsen algorithms are fully documented in published papers with Python reference implementations.
-- **Phase 4 (Advisor Integration):** discord.py slash commands, attachment handling, and interaction deferral are standard patterns.
-- **Phase 5 (Enhanced Advisor):** Additions to working advisor; no new unknown integrations.
-
----
+Phases with standard patterns (no research-phase needed):
+- **Phase 4 (Discord Advisor Mode):** discord.py slash command attachment handling, Cog structure, `defer()`/`followup` pattern, and `asyncio.to_thread()` for sync engine calls are thoroughly documented. Implementation can proceed directly from architecture plans.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Core stack choices verified against PyPI; version numbers confirmed; compatibility matrix documented; only MEDIUM on minor library versions (loguru, OpenCV exact version) |
-| Features | MEDIUM | Table stakes and differentiators are clear; Wild vs. Classic scoring details need in-game verification; Wordnik dictionary coverage vs. Letter League's actual wordlist is an unverified assumption |
-| Architecture | MEDIUM-HIGH | Core architecture patterns (GADDAG, thin Cog, BoardState contract) are well-established in published Scrabble AI literature; Letter League-specific visual parsing is uncharted territory with no public prior art |
-| Pitfalls | MEDIUM | Playwright canvas bug is documented (GitHub issue #19225) but resolution for this specific use case needs empirical testing; TOS risk is confirmed by Discord policy but enforcement behavior is uncertain |
+| Stack | HIGH | All versions verified against PyPI and official docs March 2026. `anthropic 0.86.0`, `discord.py 2.7.1`, `playwright 1.58.0`. Python 3.11 compatibility confirmed for all. Windows `ProactorEventLoop` confirmed automatic. |
+| Features | HIGH | Feature set is well-defined by architecture constraints. P1/P2/P3 priority split is unambiguous. Dependency chain (vision → advisor → autonomous) is hard and enforced by the architecture. |
+| Architecture | HIGH (integration patterns), MEDIUM (Activity iframe specifics) | Thin-cog pattern, `BoardState` contract, async boundaries — all verified against official docs. Exact Discord Activity iframe selectors and canvas rendering behavior require live validation. |
+| Pitfalls | HIGH (known failure modes), MEDIUM (Letter League-specific behaviors) | Playwright sync/async conflict, canvas blank, interaction timeout, event loop blocking, TOS risk — all sourced from official docs and confirmed issue trackers. Letter League canvas rendering timing and iframe structure require empirical testing. |
 
-**Overall confidence:** MEDIUM
+**Overall confidence:** MEDIUM-HIGH. The architecture and implementation approach are solid. The two unknowns are (1) vision accuracy on real Letter League screenshots at Discord resolution and (2) whether Playwright can reliably navigate Discord's Activity iframe in headless mode. Both are testable early and gating the subsequent phases on their validation is the right risk mitigation.
 
 ### Gaps to Address
 
-- **Wordnik vs. Letter League dictionary coverage:** Wordnik is used as a proxy for Letter League's actual dictionary. The game may reject valid Wordnik words or accept words not in Wordnik. Mitigation: build a supplementary observed-words list during testing; label advisor suggestions as "estimated valid."
-- **Canvas screenshot in headless mode:** Playwright's canvas rendering in headless Chromium is a documented bug but the fix reliability for this specific application is untested. Phase 6 must begin with a time-boxed spike to validate before committing to the autonomous mode architecture.
-- **Wild mode scoring exact rules:** Research confirms Wild mode uses permanent multipliers (bonus bonds to the letter tile permanently), but the exact calculation for cross-words in Wild mode requires in-game verification. Do not ship Wild mode scoring without empirical testing against known game outcomes.
-- **Letter League board expansion trigger:** The board is documented as expandable beyond 27x19, but the exact conditions that trigger expansion are not documented in public sources. The vision pipeline must detect grid dimensions dynamically rather than assuming a fixed size.
-- **iframe URL pattern for frame_locator:** The exact URL or attribute pattern to identify Letter League's iframe inside Discord's web client is unknown without live testing. Phase 6 requires live investigation before the automation architecture is finalized.
-- **Turn detection signal:** The autonomous mode game loop needs a reliable signal for "it is now the bot's turn." The specific UI element or state change that indicates turn handoff in Letter League requires in-game observation.
-
----
+- **Vision accuracy on real boards:** No ground-truth screenshots exist yet. The Phase 3 plan must include capturing 20+ screenshots from real games and measuring per-tile error rate before the vision pipeline is considered shippable. Target: less than 2% per-tile error, zero catastrophic misreads (rack tiles reported as board tiles or vice versa).
+- **Discord Activity iframe selector:** The exact `src` attribute or CSS selector identifying the Letter League iframe inside Discord's web client is not documented. Requires a manual inspection session using headed Playwright with browser DevTools before navigator code is written.
+- **Headless canvas rendering:** Whether the Letter League canvas renders correctly in headless Chromium or requires headed mode (with Xvfb on Linux or a virtual display) is unknown until tested. This affects the deployment model for autonomous mode.
+- **Letter League dictionary vs. Wordnik:** The v1.0 engine uses the Wordnik word list. Letter League may use a proprietary dictionary. Suggestions should be labeled "likely valid (Wordnik)" until a known-valid test word set validates the overlap rate.
+- **Scorer breakdown API:** The existing `Scorer` returns a total score, not a per-component breakdown. Showing "Z=10 on DL(x2)=20 + cross APES=8 = total 42" in advisor responses requires touching the v1.0 `Scorer`. Plan this explicitly in Phase 4 to avoid unplanned scope creep into the v1.0 engine.
+- **Turn detection signal:** The autonomous mode game loop needs a reliable signal for "it is now the bot's turn." The specific UI element or state change that indicates turn handoff in Letter League requires in-game observation during Phase 5.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- PyPI: discord.py 2.7.1, playwright 1.58.0, anthropic 0.86.0, aiosqlite 0.22.1, python-dotenv 1.2.2, pytest-asyncio 1.3.0 — version verification
-- Playwright Python official docs — async API, persistent context, ProactorEventLoop requirement
-- Gordon 1994 "A Faster Scrabble Move Generation Algorithm" — GADDAG algorithm (https://ericsink.com/downloads/faster-scrabble-gordon.pdf)
-- Appel and Jacobsen 1988 "The World's Fastest Scrabble Program" — anchor/cross-check move generation (https://www.cs.cmu.edu/afs/cs/academic/class/15451-s06/www/lectures/scrabble.pdf)
-- Wordnik wordlist GitHub — format, word count (~180k words) (https://github.com/wordnik/wordlist)
-- Discord TOS on self-bots — explicit prohibition confirmed (https://support.discord.com/hc/en-us/articles/115002192352)
-- Playwright GitHub issue #19225 — canvas elements missing from screenshots (documented bug)
-- discord.py official docs — Cogs, app_commands, interaction deferral
+- [Anthropic Claude Models Overview](https://platform.claude.com/docs/en/about-claude/models/overview) — model IDs `claude-sonnet-4-6`, `claude-haiku-4-5-20251001`, pricing, vision support, Haiku 3 deprecation April 19, 2026
+- [Anthropic Vision Docs](https://platform.claude.com/docs/en/build-with-claude/vision) — image formats, 5MB API limit, base64 encoding, 200px minimum for quality, token cost formula
+- [Anthropic Structured Outputs Docs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) — `messages.parse()` with Pydantic, schema-guaranteed JSON output
+- [discord.py official docs](https://discordpy.readthedocs.io/en/latest/) — `Attachment.read()`, `app_commands`, Cog structure, privileged intents, `ext.tasks`
+- [Discord Self-Bot TOS Policy](https://support.discord.com/hc/en-us/articles/115002192352-Automated-User-Accounts-Self-Bots) — explicit self-bot prohibition, permanent ban consequence
+- [Discord Activities Architecture](https://docs.discord.com/developers/activities/how-activities-work) — iframe + postMessage architecture, OAuth scope requirement, no programmatic bypass
+- [Playwright Python async API docs](https://playwright.dev/python/docs/api/class-playwright) — `frame_locator()`, `launch_persistent_context()`, screenshot `clip`, `async_playwright()`
+- [Playwright GitHub issue #19225](https://github.com/microsoft/playwright/issues/19225) — canvas screenshot blank in headless; resolution is wait strategy
+- [Playwright GitHub issue #33566](https://github.com/microsoft/playwright/issues/33566) — new headless Chromium in v1.49+ (November 2024); may affect canvas timing
+- [discord.py PyPI](https://pypi.org/project/discord.py/) — v2.7.1 verified March 2026
+- [anthropic PyPI](https://pypi.org/project/anthropic/) — v0.86.0 released 2026-03-18
+- [playwright PyPI](https://pypi.org/project/playwright/) — v1.58.0 released 2026-01-30
+- [discord.py FAQ — Blocking vs. Non-Blocking](https://discordpy.readthedocs.io/en/stable/faq.html) — `run_in_executor` recommendation for sync code in async handlers
 
 ### Secondary (MEDIUM confidence)
-- Letter League Discord Fandom Wiki — board dimensions (27x19 expandable), Wild vs. Classic scoring modes
-- TheLinuxCode Letter League guide — 7-tile rack confirmed, board expansion mechanics
-- Aydin Schwartz "Coding the World's Fastest Scrabble Program in Python" (Medium) — Python GADDAG implementation patterns
-- GitHub vike256/Wordbot — CLI-only reference implementation; confirms scope gap
-- GitHub 23f3000839/Letter_League_AI — Chrome extension approach; confirms no existing full Discord bot solution
-- OCR comparison benchmarks — Claude Sonnet leads for digital screenshots (multiple search sources agree)
+- [discord.py 2.5.0 changelog](https://discordpy.readthedocs.io/en/stable/) — enhanced attachment properties in 2.5+
+- [Discord Platform Manipulation Policy](https://discord.com/safety/platform-manipulation-policy-explainer) — self-bot enforcement history, ban intensity 2021-2023
+- [Letter League Discord FAQ](https://support-apps.discord.com/hc/en-us/articles/26502196674583-Letter-League-FAQ) — 27x19 expandable board, up to 8 players per game
+- [GitHub vike256/Wordbot](https://github.com/vike256/Wordbot) — CLI-only reference; no board reading or Discord integration; confirms scope gap this project fills
 
-### Tertiary (LOW confidence)
-- Letter League FAQ official docs — 403 error at research time; board/scoring details sourced from secondary sources
-- Playwright iframe handling for Discord Activities — specific URL patterns and CSP compliance details require live testing
+### Tertiary (LOW confidence — requires live validation)
+- Discord Activity iframe CSS selectors — must be empirically inspected in headed mode; no public documentation
+- Letter League canvas rendering timing signals — must be measured against real game sessions; no prior art
+- Letter League word list coverage vs. Wordnik — must be tested against known game-accepted and game-rejected words
 
 ---
-*Research completed: 2026-03-23*
+*Research completed: 2026-03-24*
 *Ready for roadmap: yes*

@@ -12,7 +12,7 @@ The build order is dictated by a strict dependency chain: the word engine is pur
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Word Engine** - GADDAG dictionary + move generation + Classic/Wild scoring
+- [x] **Phase 1: Word Engine** - GADDAG dictionary + move generation + Classic/Wild scoring
 - [ ] **Phase 2: Difficulty System** - Configurable play strength filtering layered on the move engine
 - [ ] **Phase 3: Vision Pipeline** - Board state extraction from screenshots via AI vision
 - [ ] **Phase 4: Discord Advisor Mode** - End-to-end MVP: screenshot in, word suggestion out
@@ -35,7 +35,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   - [x] 01-01-PLAN.md -- Data models + GADDAG dictionary construction and caching
   - [x] 01-02-PLAN.md -- Board state management, anchor squares, cross-check precomputation
   - [x] 01-03-PLAN.md -- Classic and Wild mode scoring engine
-  - [ ] 01-04-PLAN.md -- Move generation (LeftPart/ExtendRight) + GameEngine public API
+  - [x] 01-04-PLAN.md -- Move generation (LeftPart/ExtendRight) + GameEngine public API
 
 ### Phase 2: Difficulty System
 **Goal**: The engine produces moves calibrated to any target play strength from weakest to optimal
@@ -97,7 +97,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Word Engine | 3/4 | In progress | - |
+| 1. Word Engine | 4/4 | Complete | 2026-03-24 |
 | 2. Difficulty System | 0/? | Not started | - |
 | 3. Vision Pipeline | 0/? | Not started | - |
 | 4. Discord Advisor Mode | 0/? | Not started | - |

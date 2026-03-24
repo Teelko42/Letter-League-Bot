@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 ## Current Position
 
 Phase: 1 of 6 (Word Engine)
-Plan: 3 of 4 in current phase
-Status: In progress
-Last activity: 2026-03-24 — 01-03 (scoring engine, Classic + Wild modes) complete
+Plan: 4 of 4 in current phase — PHASE COMPLETE
+Status: Phase 1 complete, ready for Phase 2
+Last activity: 2026-03-24 — 01-04 (move generation + GameEngine API) complete
 
-Progress: [██░░░░░░░░] 12% (3/24 plans)
+Progress: [████░░░░░░] 16% (4/24 plans)
 
 ## Performance Metrics
 
@@ -27,11 +27,11 @@ Progress: [██░░░░░░░░] 12% (3/24 plans)
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-word-engine | 3/4 | ~15 min | ~5 min |
+| 01-word-engine | 4/4 | ~35 min | ~9 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (~2 min), 01-02 (~5 min), 01-03 (~8 min)
-- Trend: Plans growing with complexity as expected
+- Last 5 plans: 01-01 (~2 min), 01-02 (~5 min), 01-03 (~8 min), 01-04 (~20 min)
+- Trend: Plans growing with complexity as expected; 01-04 was largest (move generation algorithm)
 
 *Updated after each plan completion*
 
@@ -59,6 +59,10 @@ Recent decisions affecting current work:
 - [01-03]: Wild uses bonded_multiplier; Classic uses square_multiplier filtered by newly_placed_positions
 - [01-03]: Wild stacking is multiplicative (DW+DW=x4, TW+DW=x6) per research recommendation
 - [01-03]: Bingo fires on tiles_from_rack==rack_size; doubles main word only (not perp words, not +50)
+- [01-04]: Left-part placed positions threaded through _left_part and _extend_right as left_placed+right_placed — enables accurate start-position in _build_move without board mutation
+- [01-04]: Blank tiles try only GADDAG-arc letters at current node (not all 26) — correctness + efficiency
+- [01-04]: _extend_right_inner carries both left_placed and right_placed — clean public signature while enabling full placed tracking
+- [01-04]: GameEngine wraps GADDAG+Board+find_all_moves — stateful public API for Phase 2+ consumption
 
 ### Pending Todos
 
@@ -73,5 +77,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Completed 01-03-PLAN.md (scoring engine, Classic + Wild modes)
+Stopped at: Completed 01-04-PLAN.md (move generation + GameEngine, Phase 1 complete)
 Resume file: None

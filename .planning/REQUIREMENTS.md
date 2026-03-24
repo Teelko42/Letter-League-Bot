@@ -13,7 +13,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **WENG-02**: Generate all valid word placements given board state and tile rack
 - [x] **WENG-03**: Score words using Classic mode rules (letter values + multiplier squares, bonuses apply only on placement turn)
 - [x] **WENG-04**: Score words using Wild mode rules (multipliers permanently assigned to letters)
-- [ ] **WENG-05**: Select optimal move (highest-scoring valid placement)
+- [x] **WENG-05**: Select optimal move (highest-scoring valid placement)
 
 ### Board Vision
 
@@ -73,7 +73,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WENG-02 | Phase 1 | Complete (01-02) |
 | WENG-03 | Phase 1 | Complete (01-03) |
 | WENG-04 | Phase 1 | Complete (01-03) |
-| WENG-05 | Phase 1 | Pending |
+| WENG-05 | Phase 1 | Complete (01-04) |
 | VISN-01 | Phase 3 | Pending |
 | VISN-02 | Phase 3 | Pending |
 | VISN-03 | Phase 3 | Pending |
@@ -96,4 +96,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-23*
-*Last updated: 2026-03-24 — WENG-02 complete (01-02-PLAN.md); WENG-03, WENG-04 complete (01-03-PLAN.md)*
+*Last updated: 2026-03-24 — WENG-02 complete (01-02-PLAN.md); WENG-03, WENG-04 complete (01-03-PLAN.md); WENG-05 complete (01-04-PLAN.md). Phase 1 fully complete: all 5 WENG requirements met.*

@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-24T03:59:20.099Z"
+last_updated: "2026-03-24T04:05:00.000Z"
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State
@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 ## Current Position
 
 Phase: 2 of 6 (Difficulty System)
-Plan: 1 of 4 in current phase — 1 complete
-Status: Phase 2 in progress — 02-01 (FrequencyIndex) complete
-Last activity: 2026-03-24 — 02-01 (FrequencyIndex word frequency foundation) complete
+Plan: 2 of 4 in current phase — 2 complete
+Status: Phase 2 in progress — 02-02 (DifficultyEngine) complete
+Last activity: 2026-03-24 — 02-02 (DifficultyEngine blended-score move selection) complete
 
-Progress: [█████░░░░░] 21% (5/24 plans)
+Progress: [██████░░░░] 25% (6/24 plans)
 
 ## Performance Metrics
 
@@ -41,11 +41,11 @@ Progress: [█████░░░░░] 21% (5/24 plans)
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-word-engine | 4/4 | ~35 min | ~9 min |
-| 02-difficulty-system | 1/4 | ~2 min | ~2 min |
+| 02-difficulty-system | 2/4 | ~6 min | ~3 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (~2 min), 01-02 (~5 min), 01-03 (~8 min), 01-04 (~20 min), 02-01 (~2 min)
-- Trend: 02-01 was simple wrapper plan; complexity will grow with DifficultyEngine in 02-02
+- Last 5 plans: 01-02 (~5 min), 01-03 (~8 min), 01-04 (~20 min), 02-01 (~2 min), 02-02 (~4 min)
+- Trend: 02-02 DifficultyEngine complete; algorithm correction needed (percentile index inverted)
 
 *Updated after each plan completion*
 
@@ -80,6 +80,9 @@ Recent decisions affecting current work:
 - [Phase 02-difficulty-system]: zipf_frequency() with lazy dict cache over pre-built dict — avoids 321k-entry startup cost, O(1) amortized
 - [Phase 02-difficulty-system]: OOV words return 0.0 and are not excluded — consistent with CONTEXT.md; maximally obscure but still playable
 - [Phase 02-difficulty-system]: MAX_ZIPF=8.0 fixed constant for normalization — prevents rare words from inflating to 1.0 when common words absent
+- [02-02]: Always select index 0 (best adjusted move) not percentile index — plan's floor((1-alpha)*(len-1)) inverts common-word preference at low difficulty
+- [02-02]: Frequency tiebreaker as secondary sort key — among equal adjusted scores, prefer more common word; pure determinism
+- [02-02]: Score monotonicity not guaranteed by blended algorithm — must_haves spec only requires 100%=max-score and 0%=weaker
 
 ### Pending Todos
 
@@ -94,5 +97,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Completed 02-01-PLAN.md (FrequencyIndex word frequency foundation, Phase 2 started)
+Stopped at: Completed 02-02-PLAN.md (DifficultyEngine blended-score move selection)
 Resume file: None

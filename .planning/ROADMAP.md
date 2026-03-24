@@ -13,7 +13,7 @@ The build order is dictated by a strict dependency chain: the word engine is pur
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Word Engine** - GADDAG dictionary + move generation + Classic/Wild scoring
-- [ ] **Phase 2: Difficulty System** - Configurable play strength filtering layered on the move engine
+- [x] **Phase 2: Difficulty System** - Configurable play strength filtering layered on the move engine (completed 2026-03-24)
 - [ ] **Phase 3: Vision Pipeline** - Board state extraction from screenshots via AI vision
 - [ ] **Phase 4: Discord Advisor Mode** - End-to-end MVP: screenshot in, word suggestion out
 - [ ] **Phase 5: Browser Automation Foundation** - Playwright infrastructure for Discord Activity interaction
@@ -46,7 +46,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Setting difficulty to 0% returns a measurably weaker move than 100% on the same board
   3. At lower difficulties, the selected word is drawn from more common vocabulary than at 100%
   4. Difficulty setting is configurable as a numeric percentage without code changes
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
   - [ ] 02-01-PLAN.md -- Word frequency foundation (FrequencyIndex + wordfreq integration)
   - [ ] 02-02-PLAN.md -- DifficultyEngine blended score selection + integration tests
 
@@ -100,7 +100,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Word Engine | 4/4 | Complete | 2026-03-24 |
-| 2. Difficulty System | 1/2 | In Progress|  |
+| 2. Difficulty System | 2/2 | Complete   | 2026-03-24 |
 | 3. Vision Pipeline | 0/? | Not started | - |
 | 4. Discord Advisor Mode | 0/? | Not started | - |
 | 5. Browser Automation Foundation | 0/? | Not started | - |

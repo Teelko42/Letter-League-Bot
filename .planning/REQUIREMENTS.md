@@ -24,9 +24,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Difficulty
 
-- [ ] **DIFF-01**: Configurable difficulty as percentage of optimal play strength (100% = best, lower = weaker)
+- [x] **DIFF-01**: Configurable difficulty as percentage of optimal play strength (100% = best, lower = weaker)
 - [x] **DIFF-02**: Filter word candidates by vocabulary commonality at lower difficulties
-- [ ] **DIFF-03**: Vary play strategy (not just score targeting) based on difficulty setting
+- [x] **DIFF-03**: Vary play strategy (not just score targeting) based on difficulty setting
 
 ### Discord Integration
 
@@ -78,9 +78,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VISN-02 | Phase 3 | Pending |
 | VISN-03 | Phase 3 | Pending |
 | VISN-04 | Phase 3 | Pending |
-| DIFF-01 | Phase 2 | Pending |
+| DIFF-01 | Phase 2 | Complete |
 | DIFF-02 | Phase 2 | Complete |
-| DIFF-03 | Phase 2 | Pending |
+| DIFF-03 | Phase 2 | Complete |
 | DISC-01 | Phase 4 | Pending |
 | DISC-02 | Phase 4 | Pending |
 | DISC-03 | Phase 4 | Pending |

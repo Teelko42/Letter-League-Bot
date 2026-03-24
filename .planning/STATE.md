@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Vision + Discord Integration
 status: unknown
-last_updated: "2026-03-24T21:47:31.838Z"
+last_updated: "2026-03-24T21:53:03.917Z"
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-03-24)
 ## Current Position
 
 Phase: 3 of 6 (Vision Pipeline)
-Plan: 1 of 2 complete
-Status: In Progress
-Last activity: 2026-03-24 — 03-01 complete (vision foundation: errors, schema, preprocessor)
+Plan: 2 of 2 complete
+Status: Phase Complete
+Last activity: 2026-03-24 — 03-02 complete (vision extractor, validator, pipeline entry)
 
-Progress: [█░░░░░░░░░] 10% (1/2 plans complete in Phase 3)
+Progress: [██████████] 100% (2/2 plans complete in Phase 3)
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Progress: [█░░░░░░░░░] 10% (1/2 plans complete in Phase 3)
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | 03-01 Vision Foundation | 3 min | 3 | 6 |
+| 03-02 Vision Extractor + Validator | 3 min | 3 | 4 |
 
 ## Accumulated Context
 
@@ -66,6 +67,9 @@ Recent decisions affecting v1.1:
 - Always `await interaction.response.defer()` as first line of `/analyze` handler — vision API takes 4-15s
 - [Phase 03-vision-pipeline]: opencv-python, Pillow, numpy installed (were listed in STACK.md but not installed in Python 3.10.4 env)
 - [Phase 03-vision-pipeline]: OFFICIAL_MULTIPLIER_LAYOUT HSV calibration deferred — initial estimates hardcoded with TODO comment for empirical calibration against real screenshots
+- [Phase 03-vision-pipeline]: claude-sonnet-4-6 with output_config json_schema for structured Vision API output — eliminates JSON parse errors
+- [Phase 03-vision-pipeline]: BFS flood-fill for tile connectivity validation — avoids false positives on word endpoint tiles
+- [Phase 03-vision-pipeline]: anthropic==0.86.0 and loguru==0.7.3 installed (were in STACK.md but not in Python 3.10.4 env)
 
 ### Pending Todos
 
@@ -81,5 +85,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Completed 03-vision-pipeline-01-PLAN.md (vision foundation)
+Stopped at: Completed 03-vision-pipeline-02-PLAN.md (vision extractor + validator + pipeline entry)
 Resume file: None

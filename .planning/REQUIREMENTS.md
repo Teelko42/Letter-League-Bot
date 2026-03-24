@@ -9,7 +9,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Word Engine
 
-- [ ] **WENG-01**: Build GADDAG data structure from Wordnik wordlist for fast word lookup
+- [x] **WENG-01**: Build GADDAG data structure from Wordnik wordlist for fast word lookup
 - [ ] **WENG-02**: Generate all valid word placements given board state and tile rack
 - [ ] **WENG-03**: Score words using Classic mode rules (letter values + multiplier squares, bonuses apply only on placement turn)
 - [ ] **WENG-04**: Score words using Wild mode rules (multipliers permanently assigned to letters)
@@ -69,7 +69,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WENG-01 | Phase 1 | Pending |
+| WENG-01 | Phase 1 | Complete (01-01) |
 | WENG-02 | Phase 1 | Pending |
 | WENG-03 | Phase 1 | Pending |
 | WENG-04 | Phase 1 | Pending |
@@ -96,4 +96,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-23*
-*Last updated: 2026-03-23 after roadmap creation*
+*Last updated: 2026-03-24 — WENG-01 complete (01-01-PLAN.md)*

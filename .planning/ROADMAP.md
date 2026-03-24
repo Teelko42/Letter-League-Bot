@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. The engine selects the highest-scoring valid placement as the optimal move
   5. The GADDAG structure loads the full Wordnik wordlist and rejects words not in it
 **Plans:** 4 plans
-  - [ ] 01-01-PLAN.md -- Data models + GADDAG dictionary construction and caching
+  - [x] 01-01-PLAN.md -- Data models + GADDAG dictionary construction and caching
   - [ ] 01-02-PLAN.md -- Board state management, anchor squares, cross-check precomputation
   - [ ] 01-03-PLAN.md -- Classic and Wild mode scoring engine
   - [ ] 01-04-PLAN.md -- Move generation (LeftPart/ExtendRight) + GameEngine public API
@@ -97,7 +97,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Word Engine | 0/4 | Planned | - |
+| 1. Word Engine | 1/4 | In progress | - |
 | 2. Difficulty System | 0/? | Not started | - |
 | 3. Vision Pipeline | 0/? | Not started | - |
 | 4. Discord Advisor Mode | 0/? | Not started | - |

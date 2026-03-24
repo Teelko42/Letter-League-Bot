@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 ## Current Position
 
 Phase: 1 of 6 (Word Engine)
-Plan: 0 of 4 in current phase
-Status: Ready to execute
-Last activity: 2026-03-23 — Phase 1 replanned: 4 plans in 3 waves
+Plan: 1 of 4 in current phase
+Status: In progress
+Last activity: 2026-03-24 — 01-01 (GADDAG + data models) complete
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 4% (1/24 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: 0 hours
+- Total plans completed: 1
+- Average duration: ~2 min
+- Total execution time: 0.03 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01-word-engine | 1/4 | ~2 min | ~2 min |
 
 **Recent Trend:**
-- Last 5 plans: —
-- Trend: —
+- Last 5 plans: 01-01 (~2 min)
+- Trend: Baseline established
 
 *Updated after each plan completion*
 
@@ -47,6 +47,10 @@ Recent decisions affecting current work:
 - [Init]: Claude Vision API for board reading — outperforms Tesseract/EasyOCR on styled game screenshots
 - [Init]: Playwright async API exclusively — sync API raises RuntimeError inside discord.py's event loop
 - [Init]: Advisor mode before autonomous — zero TOS risk; validates core engine before adding automation
+- [01-01]: Dict-based GADDAG (not class-per-node) — lower memory overhead, O(1) dict lookups in CPython
+- [01-01]: MD5 hash of wordlist bytes for cache invalidation — reliable, no mtime race conditions
+- [01-01]: GADDAG.from_wordlist() factory pattern — clean public API, callers never touch build/cache primitives directly
+- [01-01]: SEPARATOR='+', TERMINAL='$' — standard Python GADDAG convention, non-alpha so can't collide with wordlist words
 
 ### Pending Todos
 
@@ -60,6 +64,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-23
-Stopped at: Phase 1 replanned — 4 plans created, ready to execute
+Last session: 2026-03-24
+Stopped at: Completed 01-01-PLAN.md (GADDAG + data models)
 Resume file: None

@@ -1,9 +1,9 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-milestone_name: milestone
-status: unknown
-last_updated: "2026-03-24T04:09:15.427Z"
+milestone_name: Word Engine + Difficulty System
+status: complete
+last_updated: "2026-03-24T04:52:10.110Z"
 progress:
   total_phases: 2
   completed_phases: 2
@@ -18,34 +18,28 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Analyze a Letter League board state and find the best possible word placement
-**Current focus:** Phase 2 - Difficulty System
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 2 of 6 (Difficulty System)
-Plan: 2 of 4 in current phase — 2 complete
-Status: Phase 2 in progress — 02-02 (DifficultyEngine) complete
-Last activity: 2026-03-24 — 02-02 (DifficultyEngine blended-score move selection) complete
+Milestone: v1.0 SHIPPED (2026-03-23)
+Next: `/gsd:new-milestone` to define v1.1+ scope
 
-Progress: [██████░░░░] 25% (6/24 plans)
+Progress: [██████████] 100% (6/6 plans in v1.0)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: ~5 min
-- Total execution time: 0.22 hours
+- Total plans completed: 6
+- Average duration: ~7 min
+- Total execution time: ~41 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-word-engine | 4/4 | ~35 min | ~9 min |
-| 02-difficulty-system | 2/4 | ~6 min | ~3 min |
-
-**Recent Trend:**
-- Last 5 plans: 01-02 (~5 min), 01-03 (~8 min), 01-04 (~20 min), 02-01 (~2 min), 02-02 (~4 min)
-- Trend: 02-02 DifficultyEngine complete; algorithm correction needed (percentile index inverted)
+| 02-difficulty-system | 2/2 | ~6 min | ~3 min |
 
 *Updated after each plan completion*
 
@@ -54,39 +48,11 @@ Progress: [██████░░░░] 25% (6/24 plans)
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- [Init]: Python 3.11 + discord.py 2.7.1 — ecosystem sweet spot, full async slash command support
-- [Init]: Custom GADDAG over DAWG — 2x faster move generation; required for 170k+ Wordnik wordlist
-- [Init]: Claude Vision API for board reading — outperforms Tesseract/EasyOCR on styled game screenshots
-- [Init]: Playwright async API exclusively — sync API raises RuntimeError inside discord.py's event loop
-- [Init]: Advisor mode before autonomous — zero TOS risk; validates core engine before adding automation
-- [01-01]: Dict-based GADDAG (not class-per-node) — lower memory overhead, O(1) dict lookups in CPython
-- [01-01]: MD5 hash of wordlist bytes for cache invalidation — reliable, no mtime race conditions
-- [01-01]: GADDAG.from_wordlist() factory pattern — clean public API, callers never touch build/cache primitives directly
-- [01-01]: SEPARATOR='+', TERMINAL='$' — standard Python GADDAG convention, non-alpha so can't collide with wordlist words
-- [01-02]: Anchors are direction-independent — same set for H and V; direction parameter exists for API consistency with cross-checks and left-limits
-- [01-02]: Cross-checks are direction-dependent — H validates vertical perpendicular words (gather up/down), V validates horizontal (gather left/right)
-- [01-02]: left_limit returns 0 on adjacent occupied cell — existing tile chain is a forced prefix, handled separately in move generation
-- [01-02]: TYPE_CHECKING guard for GADDAG import in board.py — avoids circular import while preserving type annotations
-- [01-03]: score_word/score_move accept cells+positions as params, not Board — keeps scoring pure and testable
-- [01-03]: Wild uses bonded_multiplier; Classic uses square_multiplier filtered by newly_placed_positions
-- [01-03]: Wild stacking is multiplicative (DW+DW=x4, TW+DW=x6) per research recommendation
-- [01-03]: Bingo fires on tiles_from_rack==rack_size; doubles main word only (not perp words, not +50)
-- [01-04]: Left-part placed positions threaded through _left_part and _extend_right as left_placed+right_placed — enables accurate start-position in _build_move without board mutation
-- [01-04]: Blank tiles try only GADDAG-arc letters at current node (not all 26) — correctness + efficiency
-- [01-04]: _extend_right_inner carries both left_placed and right_placed — clean public signature while enabling full placed tracking
-- [01-04]: GameEngine wraps GADDAG+Board+find_all_moves — stateful public API for Phase 2+ consumption
-- [Phase 02-difficulty-system]: zipf_frequency() with lazy dict cache over pre-built dict — avoids 321k-entry startup cost, O(1) amortized
-- [Phase 02-difficulty-system]: OOV words return 0.0 and are not excluded — consistent with CONTEXT.md; maximally obscure but still playable
-- [Phase 02-difficulty-system]: MAX_ZIPF=8.0 fixed constant for normalization — prevents rare words from inflating to 1.0 when common words absent
-- [02-02]: Always select index 0 (best adjusted move) not percentile index — plan's floor((1-alpha)*(len-1)) inverts common-word preference at low difficulty
-- [02-02]: Frequency tiebreaker as secondary sort key — among equal adjusted scores, prefer more common word; pure determinism
-- [02-02]: Score monotonicity not guaranteed by blended algorithm — must_haves spec only requires 100%=max-score and 0%=weaker
+v1.0 decisions archived — see `.planning/milestones/v1.0-ROADMAP.md` for full history.
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
@@ -96,6 +62,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24
-Stopped at: Completed 02-02-PLAN.md (DifficultyEngine blended-score move selection)
+Last session: 2026-03-23
+Stopped at: v1.0 milestone completed
 Resume file: None

@@ -43,10 +43,16 @@ class TestFrequencyUncommonWords:
 
 
 class TestFrequencyOOVWords:
-    """OOV game-dictionary words return Zipf 0.0 (not excluded)."""
+    """OOV game-dictionary words return Zipf 0.0 (not excluded).
+
+    Note: 'xu' and 'qat' are present in wordfreq (Zipf 3.33 and 1.86) because
+    they appear in English text. 'zyzzyva' and 'qoph' are truly absent.
+    """
 
     def test_frequency_oov_words(self, freq: FrequencyIndex) -> None:
-        oov_words = ['zyzzyva', 'xu', 'qat']
+        # zyzzyva: a type of weevil, valid in Scrabble but not in wordfreq
+        # qoph: Hebrew letter, valid in Scrabble but not in wordfreq
+        oov_words = ['zyzzyva', 'qoph']
         for word in oov_words:
             score = freq.zipf(word)
             assert score == 0.0, (

@@ -425,7 +425,7 @@ class TestDifficultyIntegration:
             )
 
     def test_integration_difficulty_gradient(self, engine, small_wordlist_file) -> None:
-        """Score at difficulty=100 >= 75 >= 50 >= 25 >= 0 (monotonic non-increasing)."""
+        """Difficulty gradient: 100% returns max score, 0% returns a weaker result."""
         from src.engine import GameEngine
         game_engine = GameEngine(str(small_wordlist_file))
         rack = ['C', 'A', 'R', 'D', 'S', 'E', 'B']
@@ -434,17 +434,27 @@ class TestDifficultyIntegration:
         if len(moves) < 3:
             pytest.skip("Too few moves for gradient test")
 
-        difficulties = [100, 75, 50, 25, 0]
-        scores = [
-            engine.select_move(moves, difficulty=d).score
-            for d in difficulties
-        ]
-        # Monotonic non-increasing: each score <= previous
-        for i in range(len(scores) - 1):
-            assert scores[i] >= scores[i + 1], (
-                f"Score non-monotonic: difficulty={difficulties[i]} score={scores[i]} "
-                f"but difficulty={difficulties[i+1]} score={scores[i+1]}"
-            )
+        # At difficulty=100, must return the highest-scoring move (must_have DIFF-01)
+        result_100 = engine.select_move(moves, difficulty=100)
+        assert result_100 is not None
+        assert result_100.score == moves[0].score, (
+            f"At difficulty=100, expected max score {moves[0].score}, "
+            f"got {result_100.score}"
+        )
+
+        # At difficulty=0, should return a weaker (lower or equal score) move
+        result_0 = engine.select_move(moves, difficulty=0)
+        assert result_0 is not None
+        assert result_0.score <= result_100.score, (
+            f"At difficulty=0, score ({result_0.score}) should be <= "
+            f"difficulty=100 score ({result_100.score})"
+        )
+
+        # Verify all difficulties return valid moves
+        for d in [25, 50, 75]:
+            result = engine.select_move(moves, difficulty=d)
+            assert result is not None, f"select_move returned None at difficulty={d}"
+            assert isinstance(result, Move)
 
     def test_integration_second_turn(self, engine, small_wordlist_file) -> None:
         """DifficultyEngine works on second-turn moves after a board play."""

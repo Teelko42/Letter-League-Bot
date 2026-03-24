@@ -8,6 +8,15 @@ An AI-powered Discord bot that plays the word game Letter League (a Scrabble-lik
 
 The bot must be able to analyze a Letter League board state and find the best possible word placement — everything else (auto-play, difficulty scaling, Discord integration) builds on top of a rock-solid word-finding engine.
 
+## Current Milestone: v1.1 Vision + Discord Integration
+
+**Goal:** Enable the bot to read Letter League board state from screenshots and play the game — either advising a user or playing autonomously via browser automation.
+
+**Target features:**
+- Vision pipeline (Claude Vision API) to extract board state from screenshots
+- Advisor mode: user drops screenshot in Discord channel, bot responds with best move
+- Autonomous mode: bot joins voice channel, opens Activity via Playwright, plays the game
+
 ## Requirements
 
 ### Validated
@@ -20,9 +29,10 @@ The bot must be able to analyze a Letter League board state and find the best po
 
 ### Active
 
-- [ ] Analyze Letter League board state from screenshots using AI vision/OCR
-- [ ] Advisor mode: user sends screenshot, bot suggests best word + placement
-- [ ] Autonomous mode: bot joins game via browser automation and plays as a player
+- [ ] Analyze Letter League board state from screenshots using Claude Vision API
+- [ ] Advisor mode: user drops screenshot in Discord channel, bot responds with best word + placement
+- [ ] Autonomous mode: bot joins voice channel via own Discord account, opens Activity with Playwright, plays as a participant
+- [ ] Discord bot foundation (discord.py, message handling, configuration)
 
 ### Out of Scope
 
@@ -50,7 +60,7 @@ Difficulty system: Blended alpha-weighted score/frequency selection, 0-100% conf
 
 - **Tech stack**: Python + discord.py for the Discord bot
 - **Browser automation**: Playwright or Selenium for autonomous game interaction
-- **Vision/OCR**: AI vision (Claude/GPT) or OCR library for board state extraction
+- **Vision**: Claude Vision API for board state extraction from screenshots
 - **Dictionary**: Must use Wordnik wordlist for word validation
 - **Discord TOS**: Bot must operate within Discord's terms of service for Activities
 
@@ -62,7 +72,9 @@ Difficulty system: Blended alpha-weighted score/frequency selection, 0-100% conf
 | Wordnik wordlist as dictionary | User specified; comprehensive English word list | ✓ Good — loaded 170k+ words |
 | Browser automation for auto-play | Discord Activities don't expose APIs; visual interaction is the only path | — Pending |
 | Configurable difficulty as % of optimal | More flexible than fixed levels; user can fine-tune bot strength | ✓ Good — blended alpha weighting works well |
-| AI vision for board reading | Board is a visual canvas, not structured data; vision/OCR is the only way to parse it | — Pending |
+| Claude Vision API for board reading | Board is a visual canvas, not structured data; Claude vision excels at structured extraction | — Pending |
+| Message-based advisor UX | Simpler than slash commands, user just drops screenshot in channel | — Pending |
+| Bot's own Discord account for auto-play | Needs to join voice channel and access Activity as a participant | — Pending |
 | Dict-based GADDAG (not class-per-node) | Lower memory overhead, O(1) dict lookups in CPython | ✓ Good — fast and memory-efficient |
 | Pickle cache with MD5 invalidation | Eliminates wordlist rebuild on startup; auto-invalidates on changes | ✓ Good — instant subsequent loads |
 | Gordon (1994) LeftPart/ExtendRight | Industry-standard Scrabble move generation algorithm | ✓ Good — finds all valid placements |
@@ -70,4 +82,4 @@ Difficulty system: Blended alpha-weighted score/frequency selection, 0-100% conf
 | GADDAG-arc pruning for blanks | Only try letters with outgoing arcs, not all 26 | ✓ Good — correctness + performance |
 
 ---
-*Last updated: 2026-03-23 after v1.0 milestone*
+*Last updated: 2026-03-24 after v1.1 milestone start*

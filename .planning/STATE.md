@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-24T02:18:31.714Z"
+last_updated: "2026-03-24T03:59:20.099Z"
 progress:
-  total_phases: 1
+  total_phases: 2
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 6
+  completed_plans: 5
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-23)
 
 **Core value:** Analyze a Letter League board state and find the best possible word placement
-**Current focus:** Phase 1 - Word Engine
+**Current focus:** Phase 2 - Difficulty System
 
 ## Current Position
 
-Phase: 1 of 6 (Word Engine)
-Plan: 4 of 4 in current phase — PHASE COMPLETE
-Status: Phase 1 complete, ready for Phase 2
-Last activity: 2026-03-24 — 01-04 (move generation + GameEngine API) complete
+Phase: 2 of 6 (Difficulty System)
+Plan: 1 of 4 in current phase — 1 complete
+Status: Phase 2 in progress — 02-01 (FrequencyIndex) complete
+Last activity: 2026-03-24 — 02-01 (FrequencyIndex word frequency foundation) complete
 
-Progress: [████░░░░░░] 16% (4/24 plans)
+Progress: [█████░░░░░] 21% (5/24 plans)
 
 ## Performance Metrics
 
@@ -41,10 +41,11 @@ Progress: [████░░░░░░] 16% (4/24 plans)
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-word-engine | 4/4 | ~35 min | ~9 min |
+| 02-difficulty-system | 1/4 | ~2 min | ~2 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (~2 min), 01-02 (~5 min), 01-03 (~8 min), 01-04 (~20 min)
-- Trend: Plans growing with complexity as expected; 01-04 was largest (move generation algorithm)
+- Last 5 plans: 01-01 (~2 min), 01-02 (~5 min), 01-03 (~8 min), 01-04 (~20 min), 02-01 (~2 min)
+- Trend: 02-01 was simple wrapper plan; complexity will grow with DifficultyEngine in 02-02
 
 *Updated after each plan completion*
 
@@ -76,6 +77,9 @@ Recent decisions affecting current work:
 - [01-04]: Blank tiles try only GADDAG-arc letters at current node (not all 26) — correctness + efficiency
 - [01-04]: _extend_right_inner carries both left_placed and right_placed — clean public signature while enabling full placed tracking
 - [01-04]: GameEngine wraps GADDAG+Board+find_all_moves — stateful public API for Phase 2+ consumption
+- [Phase 02-difficulty-system]: zipf_frequency() with lazy dict cache over pre-built dict — avoids 321k-entry startup cost, O(1) amortized
+- [Phase 02-difficulty-system]: OOV words return 0.0 and are not excluded — consistent with CONTEXT.md; maximally obscure but still playable
+- [Phase 02-difficulty-system]: MAX_ZIPF=8.0 fixed constant for normalization — prevents rare words from inflating to 1.0 when common words absent
 
 ### Pending Todos
 
@@ -90,5 +94,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-24
-Stopped at: Completed 01-04-PLAN.md (move generation + GameEngine, Phase 1 complete)
+Stopped at: Completed 02-01-PLAN.md (FrequencyIndex word frequency foundation, Phase 2 started)
 Resume file: None

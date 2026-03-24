@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 Phase: 1 of 6 (Word Engine)
 Plan: 0 of 4 in current phase
 Status: Ready to execute
-Last activity: 2026-03-23 — Phase 1 planned: 4 plans in 3 waves
+Last activity: 2026-03-23 — Phase 1 replanned: 4 plans in 3 waves
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -61,5 +61,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-23
-Stopped at: Phase 1 planned — 4 plans created, ready to execute
+Stopped at: Phase 1 replanned — 4 plans created, ready to execute
 Resume file: None

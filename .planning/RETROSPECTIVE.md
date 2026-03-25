@@ -45,6 +45,50 @@
 
 ---
 
+## Milestone: v1.1 — Vision + Discord Integration
+
+**Shipped:** 2026-03-25
+**Phases:** 2 | **Plans:** 4 | **Sessions:** ~2
+
+### What Was Built
+- Vision pipeline: OpenCV HSV board detection + Pillow 2x LANCZOS upscale + Claude Vision API with structured JSON schema output
+- Four-check validator: A-Z letter check, BFS flood-fill connectivity, multiplier position matching, rack validation
+- discord.py bot skeleton with per-channel state, color-coded embeds, text-art board renderer
+- AdvisorCog: /analyze (full vision+engine pipeline), /setdifficulty (0-100%), /setmode (Classic/Wild)
+- End-to-end flow human-verified in a live Discord guild
+
+### What Worked
+- Structured output (`output_config json_schema`) eliminated all JSON parse errors from Vision API — no need for retry on parse failures
+- Defer-first pattern prevented Discord interaction timeouts during 4-15s vision+engine processing
+- Pure-function formatter module with no bot/interaction references — fully testable in isolation
+- asyncio.to_thread wrapper for CPU-bound engine calls — clean async/sync boundary
+- Scope adjustment (shipping Phases 3-4 as v1.1, deferring 5-6) was pragmatic — advisor mode is usable standalone
+
+### What Was Inefficient
+- Dependencies (opencv-python, anthropic, discord.py, etc.) were listed in STACK.md but not installed — every plan needed a Rule 3 auto-fix for missing packages
+- HSV calibration values were initially guesses — required real-screenshot calibration pass after implementation
+- Phase 3 progress table had a formatting bug (missing v1.1 milestone column for row 3)
+
+### Patterns Established
+- AsyncAnthropic client at module level (not per-call) to avoid connection overhead
+- defer-first: await interaction.response.defer(ephemeral=True) as absolute first line of long-running slash commands
+- Local import in setup_hook to avoid circular dependencies at module load time
+- DISCORD_TEST_GUILD_ID env var for instant command sync during development
+- Color-coded Discord embeds: green=success, gold=warning, red=error, blurple=info
+
+### Key Lessons
+1. Install dependencies during project setup, not during plan execution — every plan hitting "not installed" wastes a Rule 3 deviation
+2. Structured output (json_schema) is strictly better than free-text JSON for vision extraction — eliminates an entire error class
+3. BFS flood-fill is the correct connectivity algorithm for word games — per-tile neighbor checks give false positives on word endpoints
+4. Scope adjustment at milestone completion is healthy — shipping a usable product beats waiting for all planned features
+
+### Cost Observations
+- Model mix: balanced profile (opus for planning, sonnet for execution agents)
+- Sessions: ~2
+- Notable: 4 plans completed in ~14 minutes total — faster than v1.0 due to smaller plan scope and established patterns
+
+---
+
 ## Cross-Milestone Trends
 
 ### Process Evolution
@@ -52,14 +96,17 @@
 | Milestone | Sessions | Phases | Key Change |
 |-----------|----------|--------|------------|
 | v1.0 | ~2 | 2 | Initial baseline — TDD, strict phase ordering |
+| v1.1 | ~2 | 2 | Vision + Discord integration, scope adjustment at completion |
 
 ### Cumulative Quality
 
 | Milestone | Tests | Coverage | Zero-Dep Additions |
 |-----------|-------|----------|-------------------|
 | v1.0 | 94 | — | 6 plans |
+| v1.1 | 107 | — | 4 plans |
 
 ### Top Lessons (Verified Across Milestones)
 
-1. TDD two-commit pattern catches interface issues early (v1.0 — to be verified in future milestones)
-2. Pure function design enables isolated, fast testing (v1.0 — to be verified)
+1. Pure function design enables isolated, fast testing (v1.0 formatter, v1.1 embeds — verified)
+2. Install all dependencies at project init, not during plan execution (v1.0 had zero issues, v1.1 hit it on every plan)
+3. Strict phase ordering with clean interfaces eliminates rework (verified across both milestones)

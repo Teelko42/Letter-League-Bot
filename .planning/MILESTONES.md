@@ -18,3 +18,22 @@
 
 ---
 
+
+## v1.1 Vision + Discord Integration (Shipped: 2026-03-25)
+
+**Phases completed:** 2 phases (3-4), 4 plans, 10 tasks
+
+**Key accomplishments:**
+- OpenCV HSV board detection + Pillow 2x LANCZOS upscale for screenshot preprocessing
+- Claude Vision API extractor with `output_config json_schema` — JSON parse errors eliminated at the token level
+- BFS flood-fill validator with four checks (letters, connectivity, multipliers, rack)
+- discord.py bot with per-channel state isolation, color-coded embeds, and text-art board renderer
+- AdvisorCog with /analyze (full vision+engine pipeline), /setdifficulty, /setmode — human-verified in Discord guild
+
+**Stats:** 5,155 LOC Python | 107 tests passing | 42 files changed | 1 day (2026-03-24)
+**Git range:** feat(03-01) → feat(04-02)
+
+**Scope adjustment:** Phases 5-6 (Browser Automation + Autonomous Play, AUTO-01 through AUTO-06) deferred to next milestone.
+
+---
+

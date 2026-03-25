@@ -2,20 +2,11 @@
 
 ## What This Is
 
-An AI-powered Discord bot that plays the word game Letter League (a Scrabble-like Discord Activity). It operates in two modes: an advisor mode where users send board screenshots and receive optimal word suggestions, and an autonomous mode where the bot joins the game and plays by itself using browser automation. Difficulty is configurable as a percentage of optimal play strength.
+An AI-powered Discord bot that plays the word game Letter League (a Scrabble-like Discord Activity). It operates in two modes: an advisor mode where users send board screenshots and receive optimal word suggestions via slash commands, and an autonomous mode (planned) where the bot joins the game and plays by itself using browser automation. Difficulty is configurable as a percentage of optimal play strength.
 
 ## Core Value
 
 The bot must be able to analyze a Letter League board state and find the best possible word placement — everything else (auto-play, difficulty scaling, Discord integration) builds on top of a rock-solid word-finding engine.
-
-## Current Milestone: v1.1 Vision + Discord Integration
-
-**Goal:** Enable the bot to read Letter League board state from screenshots and play the game — either advising a user or playing autonomously via browser automation.
-
-**Target features:**
-- Vision pipeline (Claude Vision API) to extract board state from screenshots
-- Advisor mode: user drops screenshot in Discord channel, bot responds with best move
-- Autonomous mode: bot joins voice channel, opens Activity via Playwright, plays the game
 
 ## Requirements
 
@@ -26,13 +17,13 @@ The bot must be able to analyze a Letter League board state and find the best po
 - ✓ Use Wordnik wordlist as the dictionary source — v1.0
 - ✓ Support Letter League's scoring rules (letter values, multiplier squares, Wild/Classic modes) — v1.0
 - ✓ Handle the 27x19 expandable board grid — v1.0
+- ✓ Analyze Letter League board state from screenshots using Claude Vision API — v1.1
+- ✓ Advisor mode: user drops screenshot in Discord channel, bot responds with best word + placement — v1.1
+- ✓ Discord bot foundation (discord.py, slash commands, configuration) — v1.1
 
 ### Active
 
-- [ ] Analyze Letter League board state from screenshots using Claude Vision API
-- [ ] Advisor mode: user drops screenshot in Discord channel, bot responds with best word + placement
 - [ ] Autonomous mode: bot joins voice channel via own Discord account, opens Activity with Playwright, plays as a participant
-- [ ] Discord bot foundation (discord.py, message handling, configuration)
 
 ### Out of Scope
 
@@ -40,13 +31,17 @@ The bot must be able to analyze a Letter League board state and find the best po
 - Real-time voice chat interaction — text-based commands only
 - Supporting other word games — Letter League specific
 - Multiplayer coordination — bot plays as a single player
+- OCR fallback (Tesseract) — Claude Vision handles canvas-rendered text natively
+- Headless browser in production — Discord detects headless Chromium; use headed with virtual display
 
 ## Context
 
-Shipped v1.0 with 3,505 LOC Python, 94 tests passing.
-Tech stack: Python 3.11, pytest, wordfreq.
+Shipped v1.1 with 5,155 LOC Python, 107 tests passing.
+Tech stack: Python 3.10, discord.py 2.7.1, anthropic SDK, OpenCV, Pillow, pytest, wordfreq.
 Core engine: GADDAG dictionary (Gordon 1994) + LeftPart/ExtendRight move generation + Classic/Wild scoring.
 Difficulty system: Blended alpha-weighted score/frequency selection, 0-100% configurable.
+Vision pipeline: OpenCV HSV preprocessing + Claude Vision API (claude-sonnet-4-6) with structured JSON schema output + BFS flood-fill validation.
+Discord bot: slash commands (/analyze, /setdifficulty, /setmode) with per-channel state, color-coded embeds, text-art board rendering.
 
 - **Letter League** is a Scrabble-like word game built into Discord as an Activity (embedded iframe in voice channels)
 - Board starts at 27x19 and expands as words are placed; no fixed max size
@@ -59,7 +54,7 @@ Difficulty system: Blended alpha-weighted score/frequency selection, 0-100% conf
 ## Constraints
 
 - **Tech stack**: Python + discord.py for the Discord bot
-- **Browser automation**: Playwright or Selenium for autonomous game interaction
+- **Browser automation**: Playwright for autonomous game interaction (async API only)
 - **Vision**: Claude Vision API for board state extraction from screenshots
 - **Dictionary**: Must use Wordnik wordlist for word validation
 - **Discord TOS**: Bot must operate within Discord's terms of service for Activities
@@ -68,18 +63,23 @@ Difficulty system: Blended alpha-weighted score/frequency selection, 0-100% conf
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Python + discord.py | Most common Discord bot stack, good library support | — Pending |
+| Python + discord.py | Most common Discord bot stack, good library support | ✓ Good — bot connects, commands register instantly |
 | Wordnik wordlist as dictionary | User specified; comprehensive English word list | ✓ Good — loaded 170k+ words |
 | Browser automation for auto-play | Discord Activities don't expose APIs; visual interaction is the only path | — Pending |
 | Configurable difficulty as % of optimal | More flexible than fixed levels; user can fine-tune bot strength | ✓ Good — blended alpha weighting works well |
-| Claude Vision API for board reading | Board is a visual canvas, not structured data; Claude vision excels at structured extraction | — Pending |
-| Message-based advisor UX | Simpler than slash commands, user just drops screenshot in channel | — Pending |
+| Claude Vision API for board reading | Board is a visual canvas, not structured data; Claude vision excels at structured extraction | ✓ Good — structured output eliminates JSON parse errors |
+| Slash commands (not message-based) | Discord deprecated prefix commands; slash commands have native attachment UI | ✓ Good — /analyze accepts screenshot attachment natively |
 | Bot's own Discord account for auto-play | Needs to join voice channel and access Activity as a participant | — Pending |
 | Dict-based GADDAG (not class-per-node) | Lower memory overhead, O(1) dict lookups in CPython | ✓ Good — fast and memory-efficient |
 | Pickle cache with MD5 invalidation | Eliminates wordlist rebuild on startup; auto-invalidates on changes | ✓ Good — instant subsequent loads |
 | Gordon (1994) LeftPart/ExtendRight | Industry-standard Scrabble move generation algorithm | ✓ Good — finds all valid placements |
 | Blended score/frequency for difficulty | Alpha-weighted: high difficulty = pure score, low = common words | ✓ Good — smooth difficulty gradient |
 | GADDAG-arc pruning for blanks | Only try letters with outgoing arcs, not all 26 | ✓ Good — correctness + performance |
+| AsyncAnthropic client | Sync client blocks discord.py event loop | ✓ Good — non-blocking vision calls |
+| output_config json_schema | Constrains Claude token generation to schema; eliminates parse errors | ✓ Good — zero JSON failures |
+| BFS flood-fill for connectivity | Avoids false positives on word endpoint tiles | ✓ Good — accurate tile group validation |
+| defer-first pattern in /analyze | Vision API takes 4-15s; Discord times out at 3s | ✓ Good — prevents interaction timeout |
+| Per-channel in-memory state | No persistence needed for initial advisor mode | ✓ Good — simple, resets on restart |
 
 ---
-*Last updated: 2026-03-24 after v1.1 milestone start*
+*Last updated: 2026-03-25 after v1.1 milestone*

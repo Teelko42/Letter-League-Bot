@@ -133,10 +133,10 @@ def test_single_tile_passes_connectivity():
 
 def test_multiplier_mismatch_detected():
     """A cell whose multiplier doesn't match OFFICIAL_MULTIPLIER_LAYOUT is flagged."""
-    # (0, 0) is TW in the official layout — report it as NONE
+    # (3, 7) is TW in the official layout — report it as NONE
     cell = {
-        "row": 0,
-        "col": 0,
+        "row": 3,
+        "col": 7,
         "letter": "A",
         "is_blank": False,
         "multiplier": "NONE",  # Should be "TW"

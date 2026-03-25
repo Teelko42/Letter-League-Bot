@@ -245,8 +245,11 @@ def _left_part(
             tried.add('_')
             rack.pop(i)
             # Blank: only try letters with GADDAG arcs at current node
+            valid_letters = cross_checks.get((tile_row, tile_col), set())
             for letter in list(node.keys()):
                 if letter in (GADDAG.SEPARATOR, GADDAG.TERMINAL):
+                    continue
+                if letter not in valid_letters:
                     continue
                 child = node[letter]
                 new_left_placed = left_placed + [(tile_row, tile_col, letter, True)]
@@ -266,6 +269,9 @@ def _left_part(
                 i += 1
                 continue
             tried.add(tile)
+            if tile not in cross_checks.get((tile_row, tile_col), set()):
+                i += 1
+                continue
             child = node.get(tile)
             if child is not None:
                 rack.pop(i)

@@ -59,7 +59,9 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
   3. Bot navigates to a target voice channel URL, clicks through to the Letter League Activity, and holds a live reference to the game iframe
   4. A canvas screenshot captured from inside the Activity iframe is non-blank (not solid black/white) and is verified as such by a pixel-variance check
   5. That same screenshot bytes flow through the existing `extract_board_state()` call and return a valid `(Board, rack)` result without modification to any vision code
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 05-01-PLAN.md — Browser session manager (persistent context, first-run login, expired session detection)
+- [ ] 05-02-PLAN.md — Activity navigation and canvas capture (channel nav, iframe discovery, screenshot + vision wire-up)
 
 ### Phase 6: Turn Detection
 **Goal**: The bot correctly identifies when it is the active player by inspecting the game canvas and does not attempt tile placement out of turn
@@ -106,7 +108,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 2. Difficulty System | v1.0 | 2/2 | Complete | 2026-03-24 |
 | 3. Vision Pipeline | v1.1 | 2/2 | Complete | 2026-03-24 |
 | 4. Discord Advisor Mode | v1.1 | 2/2 | Complete | 2026-03-25 |
-| 5. Browser Foundation | v1.2 | 0/? | Not started | - |
+| 5. Browser Foundation | v1.2 | 0/2 | Planned | - |
 | 6. Turn Detection | v1.2 | 0/? | Not started | - |
 | 7. Tile Placement | v1.2 | 0/? | Not started | - |
 | 8. Autonomous Game Loop | v1.2 | 0/? | Not started | - |

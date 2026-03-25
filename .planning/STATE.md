@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Analyze a Letter League board state and find the best possible word placement
-**Current focus:** Phase 5 — Browser Foundation (plan 1 of 3 complete)
+**Current focus:** Phase 5 — Browser Foundation (plan 2 of 3 complete — awaiting human verify)
 
 ## Current Position
 
 Phase: 5 of 8 (Browser Foundation)
-Plan: 1 of 3 complete
-Status: In progress — executing plans
-Last activity: 2026-03-25 — 05-01 BrowserSession class complete
+Plan: 2 of 3 complete (awaiting checkpoint:human-verify for Task 3)
+Status: In progress — paused at human-verify checkpoint
+Last activity: 2026-03-25 — 05-02 Navigator + capture pipeline built; awaiting live Discord verification
 
-Progress: [████░░░░░░] 42% (phases 1-4 complete; phase 5 plan 1/3 done)
+Progress: [████░░░░░░] 44% (phases 1-4 complete; phase 5 plans 1-2 done, plan 2 pending verify)
 
 ## Performance Metrics
 
@@ -58,6 +58,9 @@ v1.2 decisions so far:
 - First-run detection via `Default/Cookies` file check (not directory existence)
 - Login completion detected by `[data-list-id="guildsnav"]` selector, 5-minute timeout
 - Viewport: 1280x800 for consistent canvas screenshot dimensions
+- capture_canvas() and extract_board_state() kept separate — entry-point script chains them (capture stays reusable)
+- Primary canvas capture uses FrameLocator.screenshot(); falls back to frame.evaluate(canvas.toDataURL())
+- is_non_blank() uses np.std() threshold of 5.0 for pixel-variance blank detection pre-check
 
 ### Pending Todos
 
@@ -73,5 +76,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-25
-Stopped at: Completed 05-01-PLAN.md — BrowserSession class, patchright installed
+Stopped at: 05-02-PLAN.md Task 3 checkpoint:human-verify — navigate_to_activity + capture_canvas built; live Discord verification required
 Resume file: None

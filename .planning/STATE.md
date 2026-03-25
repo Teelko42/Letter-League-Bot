@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Vision + Discord Integration
-status: unknown
-last_updated: "2026-03-25T00:39:08.133Z"
+status: in_progress
+last_updated: "2026-03-25T01:49:42Z"
 progress:
   total_phases: 1
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 3
+  completed_plans: 1
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** Analyze a Letter League board state and find the best possible word placement
-**Current focus:** Phase 3 — Vision Pipeline (ready to plan)
+**Current focus:** Phase 4 — Discord Advisor Mode (plan 1 of 3 complete)
 
 ## Current Position
 
-Phase: 3 of 6 (Vision Pipeline)
-Plan: 2 of 2 complete
-Status: Phase Complete
-Last activity: 2026-03-24 — 03-02 complete (vision extractor, validator, pipeline entry)
+Phase: 4 of 6 (Discord Advisor Mode)
+Plan: 1 of 3 complete
+Status: In Progress
+Last activity: 2026-03-25 — 04-01 complete (bot skeleton, channel state, formatter, embed builders)
 
-Progress: [██████████] 100% (2/2 plans complete in Phase 3)
+Progress: [███░░░░░░░] 33% (1/3 plans complete in Phase 4)
 
 ## Performance Metrics
 
@@ -52,6 +52,12 @@ Progress: [██████████] 100% (2/2 plans complete in Phase 3)
 | 03-01 Vision Foundation | 3 min | 3 | 6 |
 | 03-02 Vision Extractor + Validator | 3 min | 3 | 4 |
 
+**v1.1 Phase 4 (Discord Advisor Mode):**
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| 04-01 Bot Skeleton + Formatter | 3 min | 3 | 4 |
+
 ## Accumulated Context
 
 ### Decisions
@@ -70,6 +76,10 @@ Recent decisions affecting v1.1:
 - [Phase 03-vision-pipeline]: claude-sonnet-4-6 with output_config json_schema for structured Vision API output — eliminates JSON parse errors
 - [Phase 03-vision-pipeline]: BFS flood-fill for tile connectivity validation — avoids false positives on word endpoint tiles
 - [Phase 03-vision-pipeline]: anthropic==0.86.0 and loguru==0.7.3 installed (were in STACK.md but not in Python 3.10.4 env)
+- [Phase 04-discord-advisor-mode]: discord.py 2.7.1 and python-dotenv 1.2.2 installed (not previously in Python 3.10.4 env)
+- [Phase 04-discord-advisor-mode]: Per-channel settings are in-memory only (reset on restart) — no persistence layer for initial advisor mode
+- [Phase 04-discord-advisor-mode]: GADDAG loaded fail-loud in setup_hook via asyncio.to_thread — bot refuses to start without core resource
+- [Phase 04-discord-advisor-mode]: Formatter is a pure-function module (no bot/interaction refs) — testable in isolation
 
 ### Pending Todos
 
@@ -84,6 +94,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-24
-Stopped at: Completed 03-vision-pipeline-02-PLAN.md (vision extractor + validator + pipeline entry)
+Last session: 2026-03-25
+Stopped at: Completed 04-01-PLAN.md (bot skeleton, channel state, formatter, embed builders)
 Resume file: None

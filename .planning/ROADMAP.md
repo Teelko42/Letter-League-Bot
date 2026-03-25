@@ -94,6 +94,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Word Engine | v1.0 | 4/4 | Complete | 2026-03-24 |
 | 2. Difficulty System | v1.0 | 2/2 | Complete | 2026-03-24 |
 | 3. Vision Pipeline | 2/2 | Complete   | 2026-03-24 | - |
-| 4. Discord Advisor Mode | v1.1 | 0/2 | Not started | - |
+| 4. Discord Advisor Mode | 1/2 | In Progress|  | - |
 | 5. Browser Automation Foundation | v1.1 | 0/? | Not started | - |
 | 6. Autonomous Play | v1.1 | 0/? | Not started | - |

@@ -73,27 +73,27 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BROW-01 | — | Pending |
-| BROW-02 | — | Pending |
-| BROW-03 | — | Pending |
-| ANAV-01 | — | Pending |
-| ANAV-02 | — | Pending |
-| ANAV-03 | — | Pending |
-| TURN-01 | — | Pending |
-| TILE-01 | — | Pending |
-| TILE-02 | — | Pending |
-| TILE-03 | — | Pending |
-| LOOP-01 | — | Pending |
-| LOOP-02 | — | Pending |
-| LOOP-03 | — | Pending |
-| LOOP-04 | — | Pending |
-| LOOP-05 | — | Pending |
+| BROW-01 | Phase 5 | Pending |
+| BROW-02 | Phase 5 | Pending |
+| BROW-03 | Phase 8 | Pending |
+| ANAV-01 | Phase 5 | Pending |
+| ANAV-02 | Phase 5 | Pending |
+| ANAV-03 | Phase 5 | Pending |
+| TURN-01 | Phase 6 | Pending |
+| TILE-01 | Phase 7 | Pending |
+| TILE-02 | Phase 7 | Pending |
+| TILE-03 | Phase 7 | Pending |
+| LOOP-01 | Phase 8 | Pending |
+| LOOP-02 | Phase 8 | Pending |
+| LOOP-03 | Phase 8 | Pending |
+| LOOP-04 | Phase 8 | Pending |
+| LOOP-05 | Phase 8 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15 ⚠️
+- Mapped to phases: 15
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-25*
-*Last updated: 2026-03-25 after initial definition*
+*Last updated: 2026-03-25 after roadmap creation — all 15 requirements mapped*

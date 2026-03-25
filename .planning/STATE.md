@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Analyze a Letter League board state and find the best possible word placement
-**Current focus:** Phase 5 — Browser Foundation (v1.2 ready to plan)
+**Current focus:** Phase 5 — Browser Foundation (plan 1 of 3 complete)
 
 ## Current Position
 
 Phase: 5 of 8 (Browser Foundation)
-Plan: — of — (not yet planned)
-Status: Ready to plan
-Last activity: 2026-03-25 — v1.2 roadmap created (phases 5-8 defined)
+Plan: 1 of 3 complete
+Status: In progress — executing plans
+Last activity: 2026-03-25 — 05-01 BrowserSession class complete
 
-Progress: [████░░░░░░] 40% (phases 1-4 complete; phases 5-8 not started)
+Progress: [████░░░░░░] 42% (phases 1-4 complete; phase 5 plan 1/3 done)
 
 ## Performance Metrics
 
@@ -36,6 +36,7 @@ Progress: [████░░░░░░] 40% (phases 1-4 complete; phases 5-8 
 | 2. Difficulty System | 2 | ~13 min | ~6.5 min |
 | 3. Vision Pipeline | 2 | ~6 min | ~3 min |
 | 4. Discord Advisor Mode | 2 | ~8 min | ~4 min |
+| 5. Browser Foundation | 1/3 | ~2 min | ~2 min |
 
 **Recent Trend:**
 - Last 4 plans: ~3 min, ~3 min, ~4 min, ~4 min
@@ -54,6 +55,9 @@ v1.2 decisions so far:
 - Single asyncio event loop shared by discord.py and patchright — never use sync Playwright API
 - All new code in `src/browser/`; vision/engine/difficulty untouched
 - Dedicated throwaway Discord account for Playwright session (separate from bot token)
+- First-run detection via `Default/Cookies` file check (not directory existence)
+- Login completion detected by `[data-list-id="guildsnav"]` selector, 5-minute timeout
+- Viewport: 1280x800 for consistent canvas screenshot dimensions
 
 ### Pending Todos
 
@@ -69,5 +73,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-25
-Stopped at: Roadmap created — phases 5-8 defined, ready to plan Phase 5
+Stopped at: Completed 05-01-PLAN.md — BrowserSession class, patchright installed
 Resume file: None

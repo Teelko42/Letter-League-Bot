@@ -9,8 +9,8 @@ Requirements for milestone v1.2: Browser Automation + Autonomous Play. Each maps
 
 ### Browser Session
 
-- [ ] **BROW-01**: Bot launches persistent Playwright browser session with saved Discord web login that survives restarts
-- [ ] **BROW-02**: Bot detects expired sessions at startup and notifies the operator instead of silently failing
+- [x] **BROW-01**: Bot launches persistent Playwright browser session with saved Discord web login that survives restarts
+- [x] **BROW-02**: Bot detects expired sessions at startup and notifies the operator instead of silently failing
 - [ ] **BROW-03**: Bot reconnects gracefully when the browser session or Activity disconnects mid-game
 
 ### Activity Navigation
@@ -73,8 +73,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BROW-01 | Phase 5 | Pending |
-| BROW-02 | Phase 5 | Pending |
+| BROW-01 | Phase 5 | Complete |
+| BROW-02 | Phase 5 | Complete |
 | BROW-03 | Phase 8 | Pending |
 | ANAV-01 | Phase 5 | Pending |
 | ANAV-02 | Phase 5 | Pending |

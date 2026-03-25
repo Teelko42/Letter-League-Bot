@@ -83,10 +83,9 @@ completed: 2026-03-25
 Each task was committed atomically:
 
 1. **Task 1: Implement AdvisorCog with all slash commands and update bot.py** - `3839ec8` (feat)
+2. **Task 2: Verify bot connects and slash commands work in Discord** - N/A (human-verify checkpoint, approved by user — all 6 steps passed)
 
-**Task 2 (checkpoint:human-verify):** Awaiting human verification in Discord guild.
-
-**Plan metadata:** TBD (docs commit after human verify)
+**Plan metadata:** `dba7fee` (docs: complete AdvisorCog plan — checkpoint before human verify)
 
 ## Files Created/Modified
 
@@ -125,11 +124,13 @@ python -m src.bot.bot
 
 ## Next Phase Readiness
 
-- AdvisorCog is fully implemented and registered — bot is functionally complete pending human verification
-- Task 2 (human-verify checkpoint) requires a real Discord guild test: /setdifficulty, /setmode, and /analyze with a real screenshot
-- After human verification approval, plan 04-02 is complete and Phase 4 closes
-- Blockers remain: vision pipeline accuracy on real screenshots and Discord Activity iframe selectors (Phase 6)
+- Phase 4 is fully complete — the end-to-end Discord advisor MVP is human-verified and functional in a real Discord guild
+- User submits a screenshot via /analyze and receives top-3 move recommendations as an ephemeral embed with "Bot is thinking..." deferral
+- /setdifficulty and /setmode both confirmed working with ephemeral confirmations
+- Error handling verified: non-game image returns red error embed, text file returns invalid type error
+- Phase 5 (Browser Automation Foundation) begins next: Playwright infrastructure for Discord Activity interaction
+- Active blockers: Discord Activity iframe selectors are undocumented (requires headed Playwright + DevTools inspection); Playwright canvas screenshot blank in headless Chromium (requires spike with canvas.toDataURL() fallback)
 
 ---
 *Phase: 04-discord-advisor-mode*
-*Completed: 2026-03-25 (Task 1 auto-complete; Task 2 awaiting human verify)*
+*Completed: 2026-03-25*

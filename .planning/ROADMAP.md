@@ -60,7 +60,9 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full details.
   2. User attaches a screenshot to `/analyze` and receives the top-3 move recommendations — word, position, direction, score — as an ephemeral message, without the interaction timing out
   3. User runs `/setdifficulty` to configure play strength (0-100%) and specifies Classic or Wild scoring mode; bot applies both for all subsequent analysis in the session
   4. Bot returns a clear, actionable error message when given a bad screenshot, when the vision API fails, or when no valid moves exist
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 04-01-PLAN.md — Bot foundation, channel state, and formatter (Wave 1)
+- [ ] 04-02-PLAN.md — Cog slash commands, pipeline wiring, and integration checkpoint (Wave 2)
 
 ### Phase 5: Browser Automation Foundation
 **Goal**: The bot can launch a persistent browser session, navigate Discord's web client, and capture a non-blank game canvas from inside the Letter League Activity iframe
@@ -92,6 +94,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Word Engine | v1.0 | 4/4 | Complete | 2026-03-24 |
 | 2. Difficulty System | v1.0 | 2/2 | Complete | 2026-03-24 |
 | 3. Vision Pipeline | 2/2 | Complete   | 2026-03-24 | - |
-| 4. Discord Advisor Mode | v1.1 | 0/? | Not started | - |
+| 4. Discord Advisor Mode | v1.1 | 0/2 | Not started | - |
 | 5. Browser Automation Foundation | v1.1 | 0/? | Not started | - |
 | 6. Autonomous Play | v1.1 | 0/? | Not started | - |

@@ -19,11 +19,10 @@ MAX_VISION_EDGE = 1568
 # Upscale factor applied after cropping to improve letter readability.
 UPSCALE_FACTOR = 2
 
-# HSV range for Letter League board background — needs empirical calibration
-# against real screenshots. These are initial estimates.
-# The board appears to have a beige/cream/tan background color.
-BOARD_HSV_LOWER = np.array([15, 20, 160])
-BOARD_HSV_UPPER = np.array([35, 80, 240])
+# HSV range for Letter League board background — calibrated against real screenshots.
+# Board background is a consistent peach color: HSV ~(16, 57, 255), RGB ~(255, 229, 198).
+BOARD_HSV_LOWER = np.array([10, 30, 200])
+BOARD_HSV_UPPER = np.array([25, 80, 255])
 
 
 def preprocess_screenshot(img_bytes: bytes) -> bytes:
@@ -62,6 +61,12 @@ def preprocess_screenshot(img_bytes: bytes) -> bytes:
     # Step 2: HSV conversion and color mask
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv, BOARD_HSV_LOWER, BOARD_HSV_UPPER)
+
+    # Step 2b: Morphological closing to merge fragmented board regions.
+    # The board background is peach but multiplier squares (blue, green, yellow)
+    # create gaps in the mask. Closing bridges these gaps into one large region.
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (50, 50))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
     # Step 3: Find contours on the binary mask
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)

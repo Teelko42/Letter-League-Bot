@@ -48,7 +48,6 @@ BOARD_SCHEMA: dict = {
             "type": "array",
             "items": {"type": "string"},
             "description": "Player's tile rack — list of uppercase letter strings, max 7 tiles",
-            "maxItems": 7,
         },
     },
     "required": ["board", "rack"],

@@ -1,204 +1,181 @@
 # Feature Research
 
-**Domain:** Discord word game AI bot — v1.1 Vision + Discord + Browser Automation
+**Domain:** Browser automation + autonomous play for Discord word game AI bot (v1.2)
 **Researched:** 2026-03-24
-**Confidence:** HIGH (vision pipeline, Discord bot), MEDIUM (autonomous/Playwright — TOS risk)
+**Confidence:** MEDIUM (Playwright patterns: HIGH; Discord Activity canvas specifics: MEDIUM; turn detection heuristics: LOW)
 
 ---
 
-## Scope Note
+## Scope
 
-This document covers features for **v1.1 only**: Claude Vision board reading, Discord bot
-advisor mode, and Playwright-based autonomous mode. The word engine (GADDAG, scoring,
-move generation, difficulty) is already shipped in v1.0 and is treated as a dependency,
-not a feature to build.
+This document covers **v1.2 features only**: browser automation and autonomous play.
+
+Already shipped and treated as stable dependencies:
+- GADDAG word engine + move generation + difficulty system (v1.0)
+- Claude Vision board extraction pipeline (v1.1)
+- Discord advisor bot with /analyze, /setdifficulty, /setmode (v1.1)
+
+The autonomous mode must reuse the v1.1 vision pipeline exactly — screenshot bytes flow in, BoardState flows out. No second vision implementation.
 
 ---
 
-## Feature Landscape by Area
+## Feature Landscape
 
-### Area 1: Vision Pipeline (Claude Vision API Board Reading)
+### Table Stakes (Without These, Autonomous Mode Cannot Function)
 
-#### Table Stakes
+| Feature | Why Expected | Complexity | Existing Dependency |
+|---------|--------------|------------|---------------------|
+| Persistent Playwright browser session | Bot must survive restarts without re-login; a fresh browser state on every run makes Discord login interactive — unusable in production | MEDIUM | None — new infrastructure |
+| Headless-detection bypass (headed + virtual display) | Discord web reliably detects and rejects headless Chromium; Activities may refuse to load; the PROJECT.md explicitly notes this | LOW | Requires OS-level virtual display (Xvfb on Linux, existing display on Windows) |
+| Navigate to Discord web voice channel | Bot must arrive at the correct voice channel URL before the Activity is accessible | MEDIUM | None — DOM navigation |
+| Open Letter League Activity (iframe) | Activity exists inside a dynamically injected iframe; it must be triggered to load before any game interaction is possible | HIGH | None — requires clicking Discord UI to launch Activity |
+| Wait for Activity iframe to fully load | Canvas does not render instantly; premature screenshots return a blank or loading state; must detect ready state | MEDIUM | Playwright `frame_locator()` + `wait_for_load_state()` |
+| Capture non-blank canvas screenshot from iframe | The entire autonomous pipeline starts here — screenshot bytes must be captured from the Activity canvas, not the Discord UI | HIGH | Feeds existing v1.1 vision pipeline unchanged |
+| Pass screenshot to existing vision pipeline | v1.1 `extract_board_state()` already handles bytes-in, BoardState-out; must wire Playwright screenshot bytes to this exact call | LOW | Requires v1.1 vision pipeline (already built) |
+| Turn detection (visual polling) | The bot must not act on other players' turns; Discord Activities expose no API; must infer "my turn" from visual state | HIGH | None — new problem; no existing component |
+| Tile rack click (select tile from rack) | Physical click on a rack tile to select it for placement; coordinates derived from iframe bounding box + rack region offset | HIGH | Requires pixel coordinate mapping (see below) |
+| Board cell click (place selected tile) | Physical click on target board cell; coordinates derived from board grid geometry | HIGH | Requires pixel coordinate mapping + move output from engine |
+| Play confirmation click | Letter League has a confirm/submit button after tile placement; must be located and clicked | MEDIUM | Visual identification required — no DOM anchor |
+| Asyncio-compatible game loop | discord.py and Playwright both require asyncio; the play loop must be async-native and must not block the bot's event loop | MEDIUM | Requires async Playwright API (`async_playwright`) — sync API is incompatible with discord.py's event loop |
 
-| Feature | Why Expected | Complexity | Engine Dependency |
-|---------|--------------|------------|-------------------|
-| Extract tile grid from screenshot | Core premise — everything else is useless without this | HIGH | None — pure vision work |
-| Extract rack tiles from screenshot | Advisor needs current rack, not just board | MEDIUM | None — same API call |
-| Output structured board state (dict/JSON) | Engine input format must match BoardState API | MEDIUM | Requires `BoardState` schema knowledge |
-| Handle color-coded multiplier squares | DL/TL/DW/TW squares must be read, not guessed | HIGH | Feeds `Cell.multiplier` in existing board model |
-| Validate extracted state before passing to engine | Bad parse = wrong moves; must detect failure gracefully | MEDIUM | Uses existing `BoardState` validation |
-| Distinguish empty cells from occupied cells | 27x19 grid has many empty cells; false positives break move gen | MEDIUM | Critical for GADDAG anchor detection |
-
-#### Differentiators
+### Differentiators (Competitive Advantage)
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| Prompt-engineered JSON schema output | Forces Claude to output exactly what `BoardState` constructor expects, zero post-processing | LOW | Use explicit JSON schema in system prompt; proven pattern per official docs |
-| Confidence flags in vision output | Claude can indicate partial-visibility cells; flag low-confidence reads for user review | LOW | Ask Claude to add a `confidence: low` field per cell where uncertain |
-| Region cropping before API call | Crop to board area only before sending; reduces tokens, improves accuracy, cuts cost | LOW | Screenshot is ~1920x1080; board occupies maybe 60% — clip saves ~$0.002/call |
-| Rack-first prompt ordering | Send rack region as Image 1, board as Image 2 — rack is smaller, anchor the parse | LOW | Official docs confirm image ordering matters for structured extraction |
-| Two-shot parse with retry | If first parse fails validation, send again with "your previous output had error X, retry" | MEDIUM | Handles edge cases without human intervention |
+| Pre-computed pixel coordinate map | Compute board cell pixel positions once at game start by detecting grid lines or board origin; reuse for all subsequent moves without re-computing per turn | HIGH | OpenCV on the captured canvas screenshot can detect grid intersections; store as `dict[(row, col)] -> (x, y)` relative to iframe origin |
+| Blank-frame detection before vision call | Detect and skip blank/loading canvas frames before sending to Claude Vision API; avoids wasted API calls during game startup or turn transitions | LOW | Compare mean pixel value of canvas region to a threshold; `numpy.mean(img_array) < 10` catches black/blank frames cheaply |
+| Human-like timing jitter on actions | Random delays between action steps (tile select, board click, confirm) make the bot look less mechanical and reduce bot-detection risk | LOW | `asyncio.sleep(random.uniform(0.5, 2.0))` between each click; trivial to add |
+| Graceful reconnect on session drop | If the browser session dies or the Activity disconnects, the bot re-navigates and re-joins without manual restart | MEDIUM | Wrap the main game loop in a try/except; on failure, navigate from Discord homepage, re-join voice channel, re-open Activity |
+| Tile swap fallback when no good move | When the engine returns no valid moves above a quality threshold, choose the swap action (if available) rather than passing; uses existing difficulty engine | MEDIUM | Check move list; if empty or best score below configurable floor, locate and click the swap UI |
+| Separate browser subprocess from bot process | Run the Playwright browser in a subprocess or thread so that a browser crash does not kill the discord.py bot process | MEDIUM | Use `asyncio.create_task()` for the game loop; isolation means the bot stays alive and can report errors to Discord even when the browser fails |
 
-#### Anti-Features
-
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| Real-time continuous screen polling | "Watch the game and auto-update" | Requires persistent Playwright process in advisor mode — that IS autonomous mode | Use autonomous mode for always-on; advisor stays per-screenshot |
-| OCR fallback (Tesseract etc.) | "What if Claude Vision fails?" | Letter League uses a canvas-rendered font; Tesseract requires training data for it; Claude Vision handles it natively | Claude Vision is the right tool; add retry logic instead of OCR fallback |
-| Caching vision results per screenshot hash | "Avoid redundant API calls" | Screenshot changes every turn; hash cache hits will be rare; adds complexity for near-zero benefit | Vision call is ~$0.004/image at 1MP; not worth caching infrastructure |
-
----
-
-### Area 2: Discord Bot Foundation + Advisor Mode
-
-#### Table Stakes
-
-| Feature | Why Expected | Complexity | Engine Dependency |
-|---------|--------------|------------|-------------------|
-| Discord bot process (discord.py, login, gateway) | Bot must exist before any interaction is possible | LOW | None |
-| `/analyze` slash command with attachment parameter | Discord standard since 2021; `discord.Attachment` type annotation gives native file picker | LOW | None |
-| Download attachment bytes in memory | `await attachment.read()` — no temp file needed | LOW | Feeds vision pipeline |
-| Pass vision output to GameEngine | `GameEngine.set_board()` or equivalent; translate parsed JSON to existing API | MEDIUM | Requires `GameEngine` public API knowledge |
-| Return top-N move recommendations | "EXAMPLE at H7 across = 34 pts" format; top 3 minimum | LOW | Uses `MoveGenerator` + `DifficultyEngine` already built |
-| Error response for bad screenshot | "Couldn't parse board — try a cleaner screenshot" | LOW | None |
-| `/setdifficulty` command | Bot must be configurable per-user or per-guild | LOW | Uses `DifficultyEngine(difficulty_pct)` |
-
-#### Differentiators
-
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Ephemeral responses (only user sees bot reply) | Prevents board spoilers in shared channels | LOW | `interaction.response.send_message(..., ephemeral=True)` |
-| Score breakdown in response | "Z=10 on DL(x2)=20 + cross APES=8 = total 42" teaches strategy | MEDIUM | Requires scoring engine to return component breakdown, not just total |
-| Mode selector (Classic/Wild) parameter | One command works for both game modes | LOW | `/analyze mode:wild screenshot:[file]` |
-| Top-3 alternatives shown | User may want second-best for strategic reasons | LOW | `MoveGenerator` already returns all moves; just take top-3 |
-| Bingo callout | "BINGO! All 7 tiles played — word score doubled" | LOW | Flag 7-tile plays; already tracked in existing scoring engine |
-| Per-user difficulty persistence | Remember user's preferred difficulty between sessions | MEDIUM | Simple key-value store (shelve or sqlite) keyed on `user_id` |
-
-#### Anti-Features
+### Anti-Features (Commonly Requested, Often Problematic)
 
 | Feature | Why Requested | Why Problematic | Alternative |
 |---------|---------------|-----------------|-------------|
-| Prefix commands (`!analyze`) | "Simpler to type" | Discord deprecated prefix commands for bots requiring message intent; slash commands are the standard and have native attachment UI | Use slash commands exclusively |
-| Embed board visualization | "Show the board state the bot read" | Rendering a 27x19 grid as a readable Discord embed requires significant image generation work; adds a whole new dependency | Return text description of best move; trust user can see the board themselves |
-| Multi-server configuration dashboard | "Configure bot per server" | A web dashboard for bot config is a product in itself; massive complexity for marginal value | `/setdifficulty` and `/setmode` slash commands handle 100% of config |
-| Global leaderboard | "Rank players by bot score" | Ranks "who used the bot most," not actual skill; adds database for zero gameplay value | Out of scope per PROJECT.md |
-
----
-
-### Area 3: Autonomous Mode (Playwright Browser Automation)
-
-#### Table Stakes
-
-| Feature | Why Expected | Complexity | Engine Dependency |
-|---------|--------------|------------|-------------------|
-| Chromium launch with persistent session | Bot needs to be logged into Discord web; persistent context avoids re-login | MEDIUM | None |
-| Navigate to Discord web and join voice channel | Bot must appear as a participant in the voice channel | HIGH | None |
-| Open Letter League Activity in iframe | Activity loads as embedded iframe; bot must trigger launch | HIGH | None |
-| Screenshot the Activity iframe region | Capture only the game board area, not full Discord UI | MEDIUM | Feeds vision pipeline |
-| Parse screenshot via vision pipeline | Reuse Area 1 vision pipeline exactly | LOW | Requires Area 1 complete |
-| Select and click tile placements | Click rack tile, then click board cell for each letter of the word | HIGH | Requires move output with absolute pixel coordinates |
-| Wait for turn | Detect when it is the bot's turn before acting | HIGH | No API; must infer from visual state (e.g., rack tiles becoming clickable) |
-| Handle word confirmation UI | After tile placement, Letter League likely has a "confirm" or "play" button | MEDIUM | Must be identified via DOM inspection or visual matching |
-
-#### Differentiators
-
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Pixel coordinate mapping for board cells | Pre-compute the pixel position of each board cell relative to iframe origin | HIGH | Map once at game start by detecting grid lines; reuse for all moves |
-| Visual turn detection (not polling) | Watch for DOM mutation or visual change indicating turn start rather than polling | MEDIUM | Playwright `page.wait_for_selector()` or `page.expect_event()` — avoids busy-wait |
-| Human-like timing jitter | Add random 0.5-2s delays between actions to avoid bot detection | LOW | `asyncio.sleep(random.uniform(0.5, 2.0))` |
-| Graceful disconnect and re-join | If connection drops, bot re-navigates and re-joins without manual restart | MEDIUM | Try/except around main loop with re-join logic |
-| Tile swap detection | If no good move exists, choose swap vs. pass intelligently | MEDIUM | Use existing `DifficultyEngine` logic — if best score below threshold, swap |
-
-#### Anti-Features
-
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| Using a selfbot (user-account bot via discord.py) for Discord gateway | "Simpler than browser automation" | Discord explicitly bans selfbots — automated user accounts violate TOS and result in permanent bans (confirmed by Discord's own policy page) | Playwright controlling Discord web in Chromium is the correct path — it is human-like browsing, not API automation |
-| Headless browser in production | "Saves resources" | Discord web detects headless Chromium fingerprints reliably; Activities may refuse to load | Use `headless=False` with a virtual display (Xvfb on Linux) or minimal window on desktop |
-| Multiple autonomous sessions simultaneously | "Play multiple games at once" | Each session needs its own browser context and Discord account; dramatically multiplies TOS risk and complexity | Single session only for v1.1; document as hard constraint |
-| Selenium instead of Playwright | "More familiar" | Playwright Python (1.40+) has superior async support, iframe frame_locator() API, and better screenshot clipping — directly needed for this project | Playwright is specified in PROJECT.md; stick to it |
+| Selfbot / user-account gateway automation (discord.py-self) | Simpler than browser automation; no need for Playwright | Discord explicitly bans automated user accounts (TOS §4); enforcement is active and results in permanent account termination; confirmed by Discord's own policy page | Playwright controlling Discord web in Chromium is the correct path — it mimics a human using a browser, not an API client |
+| Headless Chromium in production | Saves memory; simpler to run on a server | Discord web detects headless fingerprints via JavaScript (`navigator.webdriver`, missing plugins, zero-size screen dimensions); Activities may refuse to load or render blank | Use `headless=False` with a virtual framebuffer (`Xvfb` on Linux, or the existing desktop display on Windows during development) |
+| Multiple concurrent autonomous sessions | Play multiple games simultaneously | Each session requires a separate Discord user account and browser context; multiplies TOS risk; Playwright resource cost scales linearly; debugging becomes extremely hard | Hard constraint: one session only for v1.2; document this explicitly |
+| DOM scraping for game state | "Query the Activity DOM instead of screenshotting" | Letter League renders its game board on an HTML5 canvas element inside an iframe; there is no DOM tree representing tile positions or the board grid — it is pixel data only | Screenshots + vision pipeline is the only viable path; DOM scraping is not applicable |
+| Polling every frame (60fps screenshot loop) | "Maximum responsiveness" | Claude Vision API takes 4-15 seconds per call; screenshot capture at 60fps generates ~60 identical frames per second that all route to the same queue; wastes CPU and API credits with zero benefit | Poll at 1-2 second intervals with blank-frame detection; only invoke the vision pipeline when a visual change is detected |
+| Re-implementing vision pipeline for autonomous mode | "Different pipeline for auto-play" | The v1.1 vision pipeline was built and validated for this exact purpose (bytes in, BoardState out); duplicating it creates two code paths to maintain | Wire Playwright screenshot bytes directly into `extract_board_state()` — zero code changes to the vision module |
+| Storing canvas state as DOM attributes | "Persist board state between turns without re-screenshotting" | Canvas has no accessible DOM state; JavaScript evaluation can read `canvas.toDataURL()` but this returns the same pixel data the Playwright screenshot captures, with higher complexity | Re-screenshot and re-parse each turn; the 4-15s vision call is within the turn time limit of a word game |
+| Click automation via PyAutoGUI or pywin32 | "Simpler than Playwright for clicks" | System-level click automation cannot target iframes inside a specific browser window; would click on whatever is under the cursor globally | Playwright's `page.mouse.click(x, y)` or `locator.click(position=...)` target the browser context directly, no global coordinates needed |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[v1.0 Engine: GameEngine, MoveGenerator, DifficultyEngine, Scorer]
-    (already built — treat as library)
+[v1.0 Engine: GADDAG, MoveGenerator, DifficultyEngine, Scorer]
+    (already built — library dependency)
 
-[Area 1: Vision Pipeline]
-    └──requires──> [Discord attachment download OR Playwright iframe screenshot]
-    └──produces──> [BoardState JSON for GameEngine]
-    └──feeds──> [Area 2: Advisor Mode]
-    └──feeds──> [Area 3: Autonomous Mode]
+[v1.1 Vision Pipeline: extract_board_state(bytes) -> (BoardState, RackState)]
+    (already built — reused unchanged)
 
-[Area 2: Advisor Mode]
-    └──requires──> [Discord bot process (gateway, login)]
-    └──requires──> [/analyze slash command]
-    └──requires──> [Area 1: Vision Pipeline]
-    └──requires──> [v1.0 Engine]
-    └──produces──> [Move recommendation embed to user]
+[v1.1 Discord Bot: discord.py process, slash commands, channel state]
+    (already built — autonomous mode runs alongside it)
 
-[Area 3: Autonomous Mode]
-    └──requires──> [Playwright Chromium session]
-    └──requires──> [Area 1: Vision Pipeline]  ← reuses exactly
-    └──requires──> [v1.0 Engine]
-    └──requires──> [Pixel coordinate map of board]
-    └──enhances──> [Area 2: Advisor Mode]  ← shares vision pipeline
-    └──conflicts──> [Selfbot/user-account gateway automation]
+[Persistent Browser Session]
+    └──requires──> [Playwright chromium launch_persistent_context]
+    └──requires──> [Initial manual Discord login to create session file]
+    └──produces──> [Active browser context for all subsequent features]
 
-[Per-user difficulty persistence]
-    └──requires──> [Discord bot process]
-    └──enhances──> [Area 2 + Area 3]
+[Activity Iframe Load]
+    └──requires──> [Persistent Browser Session]
+    └──requires──> [Navigate to voice channel URL]
+    └──requires──> [Click to open Letter League Activity]
+    └──produces──> [Accessible iframe with canvas]
 
-[Score breakdown in response]
-    └──requires──> [v1.0 Scorer returning component data, not just total]
-    └──enhances──> [Area 2: Advisor Mode response quality]
+[Canvas Screenshot Capture]
+    └──requires──> [Activity Iframe Load]
+    └──requires──> [Wait for non-blank canvas frame]
+    └──produces──> [PNG bytes for vision pipeline]
+
+[Board State Extraction]
+    └──requires──> [Canvas Screenshot Capture]
+    └──requires──> [v1.1 Vision Pipeline] ← reused unchanged
+    └──produces──> [BoardState + RackState]
+
+[Move Selection]
+    └──requires──> [Board State Extraction]
+    └──requires──> [v1.0 MoveGenerator + DifficultyEngine]
+    └──produces──> [Selected Move with word, positions, score]
+
+[Pixel Coordinate Map]
+    └──requires──> [Canvas Screenshot Capture] ← built once at game start
+    └──requires──> [OpenCV grid detection on canvas image]
+    └──produces──> [dict[(row,col)] -> (iframe_x, iframe_y)]
+
+[Tile Placement]
+    └──requires──> [Move Selection]
+    └──requires──> [Pixel Coordinate Map]
+    └──requires──> [Turn Detection (bot is active)]
+    └──produces──> [Tiles placed on board, pending confirmation]
+
+[Turn Detection]
+    └──requires──> [Canvas Screenshot Capture] ← periodic polling
+    └──requires──> [Visual change detection (pixel diff or rack state change)]
+    └──produces──> [Signal: my_turn = True/False]
+
+[Play Confirmation]
+    └──requires──> [Tile Placement]
+    └──requires──> [Confirm button location (visual or DOM)]
+    └──produces──> [Word submitted, turn complete]
+
+[Autonomous Game Loop]
+    └──requires──> [All above features]
+    └──enhances──> [Discord bot] ← loop runs as asyncio task alongside bot
+    └──conflicts──> [Selfbot approach] ← mutually exclusive architectures
 ```
 
 ### Dependency Notes
 
-- **Vision pipeline is the shared critical path.** Both advisor and autonomous mode feed through the same Area 1 code. Build and validate vision before touching Area 2 or 3.
-- **Advisor mode must precede autonomous mode.** The move-generation and vision pipeline must be proven reliable in the lower-stakes advisor context before trusting them to click tiles autonomously.
-- **Pixel coordinate mapping is the hardest autonomous-mode problem.** The game board is a canvas element inside an iframe; there is no DOM structure to query for cell positions. Must derive coordinates from visual grid detection or hardcoded offsets relative to detected board origin.
-- **Score breakdown requires engine changes.** The existing `Scorer` returns a total score. To show per-component breakdown in Discord responses, it must return a breakdown dict. This is a v1.0 engine touch that must be planned carefully.
-- **Selfbot approach is a hard blocker.** Discord's TOS explicitly prohibits automating user accounts via the gateway API. Playwright controlling a browser is the sanctioned path — it mimics human interaction.
+- **Pixel coordinate mapping is the highest-risk new problem.** The game board renders on a canvas; cell positions are pixel-based with no DOM backing. The coordinate map must be computed from the canvas screenshot using grid detection (OpenCV line detection or fixed-offset arithmetic from the detected board origin). This blocks all tile placement.
+
+- **Turn detection has no API.** Discord Activities expose no WebSocket events or DOM mutations that signal "it is now player X's turn." The bot must infer its turn from visual changes — likely: the rack tiles change appearance (become highlighted or active) when it is the bot's turn, or a "your turn" indicator appears. This requires empirical investigation against a live game.
+
+- **The asyncio constraint is hard.** Discord.py runs on an asyncio event loop. Playwright's sync API blocks the event loop. All Playwright calls must use `async_playwright()` and be awaited. The game loop must be `asyncio.create_task()` so it runs concurrently with discord.py's event processing.
+
+- **Vision pipeline is reused without changes.** `extract_board_state(img_bytes, mode=state.mode)` from v1.1 is the exact interface. Autonomous mode captures screenshot bytes from Playwright and passes them directly to this function. No new vision code.
+
+- **Initial login is a one-time manual step.** The `launch_persistent_context(user_data_dir=...)` approach saves the authenticated session to disk. The first run requires a human to log into Discord web in the browser window; subsequent runs load the saved session automatically.
 
 ---
 
 ## MVP Definition
 
-### Launch With (v1.1)
+### Launch With (v1.2 — Autonomous Mode Core)
 
-Minimum for this milestone to be considered complete.
+Minimum viable autonomous play. The bot must complete at least one full turn without human intervention.
 
-- [ ] **Vision pipeline (Area 1 core)** — parse board grid + rack from screenshot, output structured JSON; validate output before passing to engine. This is the single highest-risk item.
-- [ ] **Discord bot process** — discord.py bot with proper token auth, guild registration, slash command tree sync.
-- [ ] **`/analyze` slash command** — accepts `discord.Attachment`, downloads bytes in memory, runs vision pipeline, runs move gen, returns top-3 moves. Ephemeral response.
-- [ ] **`/setdifficulty` command** — sets difficulty for the calling user; persists for session.
-- [ ] **Mode parameter (Classic/Wild)** — slash command parameter, not a separate command.
-- [ ] **Error handling** — actionable messages for bad screenshots, API failures, no valid moves.
+- [ ] **Persistent Playwright session** — `launch_persistent_context` with `user_data_dir`; headed mode; saves Discord login across restarts
+- [ ] **Voice channel navigation** — navigate to Discord web, join the correct voice channel by URL or name
+- [ ] **Activity iframe load** — detect and wait for Letter League iframe to be ready; handle blank-frame state
+- [ ] **Canvas screenshot capture** — capture bytes from the Activity canvas region; blank-frame detection before invoking vision
+- [ ] **Vision pipeline wire-up** — pass screenshot bytes to existing `extract_board_state()`; no new vision code
+- [ ] **Move selection** — pass BoardState + RackState to existing `find_all_moves()` + `DifficultyEngine.select_move()`
+- [ ] **Pixel coordinate map** — compute board cell pixel positions from canvas screenshot at game start
+- [ ] **Turn detection** — poll canvas screenshot; detect visual change indicating bot's turn (rack highlight or turn indicator)
+- [ ] **Tile placement** — click rack tile, click board cell for each letter in the selected word
+- [ ] **Play confirmation** — locate and click the confirm/play button
+- [ ] **Asyncio game loop** — the full loop runs as an `asyncio.create_task()` concurrent with the discord.py event loop
 
-### Add After Advisor Validation (v1.1.x)
+### Add After Core Loop Validates (v1.2.x)
 
-Once advisor mode is working and being used.
+Once one turn completes end-to-end without error.
 
-- [ ] **Score breakdown in response** — requires touching Scorer to return component data.
-- [ ] **Per-user difficulty persistence** — sqlite or shelve; simple key-value on user_id.
-- [ ] **Retry on vision parse failure** — two-shot parse with error feedback to Claude.
-- [ ] **Bingo callout** — trivial; flag 7-tile moves in response.
+- [ ] **Graceful reconnect** — re-navigate and re-join on session drop or Activity disconnect
+- [ ] **Tile swap fallback** — when no valid moves exist, click swap UI instead of crashing
+- [ ] **Human-like timing jitter** — random delays between actions
+- [ ] **Blank-frame retry** — if vision returns an error on a blank canvas, wait and retry before failing
+- [ ] **Discord status updates** — bot posts what move it played to a designated channel (for human observers)
 
-### Future (v2 — Autonomous Mode)
+### Future Consideration (v2+)
 
-Defer until advisor is proven reliable over real game sessions.
-
-- [ ] **Playwright Chromium session** — persistent Discord web login, voice channel join.
-- [ ] **Activity iframe interaction** — screenshot, parse, act.
-- [ ] **Pixel coordinate map** — derive board cell coordinates from visual grid detection.
-- [ ] **Turn detection** — wait for visual cue that it is bot's turn.
-- [ ] **Tile placement clicks** — select rack tile, click board cells, confirm play.
+- [ ] **Multi-game session management** — defer; requires multiple Discord accounts and dramatically higher complexity
+- [ ] **Adaptive turn detection** — ML-based pixel change detector instead of threshold polling; defer until threshold approach proves insufficient
+- [ ] **Tile swap strategy integration with difficulty engine** — swap decisions that account for rack quality and game state; defer until core swap works
 
 ---
 
@@ -206,57 +183,60 @@ Defer until advisor is proven reliable over real game sessions.
 
 | Feature | User Value | Implementation Cost | Priority |
 |---------|------------|---------------------|----------|
-| Vision pipeline — grid + rack extraction | HIGH | HIGH | P1 |
-| Discord bot process (gateway, auth) | HIGH | LOW | P1 |
-| `/analyze` slash command with attachment | HIGH | LOW | P1 |
-| BoardState JSON → GameEngine bridge | HIGH | MEDIUM | P1 |
-| Top-3 move recommendations in response | HIGH | LOW | P1 |
-| Error handling for bad screenshots | HIGH | LOW | P1 |
-| `/setdifficulty` + Classic/Wild mode param | MEDIUM | LOW | P1 |
-| Ephemeral responses | MEDIUM | LOW | P1 |
-| Score breakdown per component | MEDIUM | MEDIUM | P2 |
-| Per-user difficulty persistence | MEDIUM | LOW | P2 |
-| Vision retry on parse failure | MEDIUM | LOW | P2 |
-| Bingo callout | LOW | LOW | P2 |
-| Region crop before vision API call | MEDIUM | LOW | P2 |
-| Playwright Chromium session | HIGH | HIGH | P3 |
-| Activity iframe screenshot + parse | HIGH | HIGH | P3 |
-| Board pixel coordinate mapping | HIGH | HIGH | P3 |
-| Turn detection (visual) | HIGH | HIGH | P3 |
-| Tile placement clicks | HIGH | HIGH | P3 |
+| Persistent browser session | HIGH | MEDIUM | P1 |
+| Activity iframe load + wait | HIGH | HIGH | P1 |
+| Canvas screenshot capture (non-blank) | HIGH | MEDIUM | P1 |
+| Vision pipeline wire-up | HIGH | LOW | P1 |
+| Pixel coordinate map (board cells) | HIGH | HIGH | P1 |
+| Turn detection (visual polling) | HIGH | HIGH | P1 |
+| Tile placement (rack + board clicks) | HIGH | HIGH | P1 |
+| Play confirmation click | HIGH | MEDIUM | P1 |
+| Asyncio game loop | HIGH | MEDIUM | P1 |
+| Headed mode + detection bypass | HIGH | LOW | P1 |
+| Graceful reconnect | MEDIUM | MEDIUM | P2 |
+| Tile swap fallback | MEDIUM | MEDIUM | P2 |
+| Human-like timing jitter | LOW | LOW | P2 |
+| Discord status updates from autonomous mode | LOW | LOW | P2 |
+| Multi-game / multi-session | LOW | VERY HIGH | P3 |
 
 **Priority key:**
-- P1: Must have for v1.1 launch (advisor mode complete)
-- P2: Add after advisor is validated
-- P3: Autonomous mode — v2
+- P1: Required for one complete autonomous turn end-to-end
+- P2: Required for sustained multi-turn play without human intervention
+- P3: Future milestone
 
 ---
 
-## Complexity Assessment by Area
+## Complexity Assessment
 
-| Area | Overall Complexity | Highest Risk Item | Notes |
-|------|-------------------|-------------------|-------|
-| Vision Pipeline | HIGH | Multiplier square color detection | Canvas-rendered UI; colors may be subtle; test with real screenshots early |
-| Discord Bot | LOW | Slash command attachment flow | Well-documented, discord.py 2.5+ has native attachment type |
-| Vision→Engine Bridge | MEDIUM | BoardState schema mapping | Requires knowing exact GameEngine constructor; touch existing code |
-| Autonomous Mode | VERY HIGH | Pixel coordinate mapping + turn detection | No DOM structure; pure visual; highly brittle to UI changes |
+| Problem | Complexity | Why | Phase Risk |
+|---------|------------|-----|------------|
+| Persistent session + headed launch | MEDIUM | Well-documented Playwright API; main risk is Discord detecting the browser | LOW |
+| Activity iframe navigation | HIGH | Discord UI is dynamic React; Activity launch sequence must be discovered empirically | HIGH |
+| Canvas screenshot capture | MEDIUM | `page.screenshot(clip=...)` or `frame_locator().locator('canvas').screenshot()` — well-supported | MEDIUM |
+| Vision pipeline wire-up | LOW | Same bytes-in/BoardState-out API as advisor mode; zero new code | LOW |
+| Pixel coordinate mapping | HIGH | No DOM; must compute from pixel grid geometry; brittle to UI scaling changes | HIGH |
+| Turn detection | HIGH | No API; pure visual heuristic; must discover what the "your turn" indicator looks like | HIGH |
+| Tile placement clicks | HIGH | Depends on coordinate map accuracy; each letter in the word requires two clicks in sequence | HIGH |
+| Play confirmation | MEDIUM | Confirm button likely visible in DOM or has a consistent visual; must locate it empirically | MEDIUM |
+| Asyncio game loop | MEDIUM | Pattern is well-understood (asyncio.create_task); main risk is blocking calls sneaking in | MEDIUM |
 
 ---
 
 ## Sources
 
-- [Claude Vision API — Official Docs](https://platform.claude.com/docs/en/build-with-claude/vision) — Image format requirements (JPEG/PNG/GIF/WebP), 5MB limit, base64/URL/file_id patterns, structured extraction best practices. HIGH confidence.
-- [Discord.py — Slash Commands Masterclass](https://fallendeity.github.io/discord.py-masterclass/slash-commands/) — `discord.Attachment` type annotation for slash commands, `attachment.read()` for in-memory bytes. HIGH confidence.
-- [Discord.py 2.5.0 changelog (March 2025)](https://discordpy.readthedocs.io/en/stable/) — Enhanced attachment properties; 2.6.0 (August 2025) added attachment titles/descriptions. MEDIUM confidence (search-sourced).
-- [Discord Automated User Accounts (Self-Bots) — Official Policy](https://support.discord.com/hc/en-us/articles/115002192352-Automated-User-Accounts-Self-Bots) — Explicit ban on selfbots; permanent account termination. HIGH confidence.
-- [Discord Activities — How Activities Work](https://docs.discord.com/developers/activities/how-activities-work) — iframe + postMessage architecture, OAuth scope requirement, no programmatic bypass of auth handshake. HIGH confidence.
-- [Playwright Python — iframe handling](https://playwright.dev/python/docs/api/class-page) — `frame_locator()`, `page.screenshot(clip=...)`, persistent context via `launch_persistent_context`. HIGH confidence.
-- [Playwright Python — Screenshots](https://playwright.dev/python/docs/screenshots) — `clip` parameter for region capture; async API. HIGH confidence.
-- [Playwright Python — Authentication](https://playwright.dev/python/docs/auth) — `launch_persistent_context(user_data_dir=...)` for session persistence across runs. HIGH confidence.
-- [GitHub — vike256/Wordbot](https://github.com/vike256/Wordbot) — Reference Letter League bot; CLI only, no board reading, no Discord integration. Confirms gap this project fills.
-- [Discord Slash Commands Complete Guide 2025](https://friendify.net/blog/discord-slash-commands-complete-guide-2025.html) — Attachment handling patterns, slash command standards. MEDIUM confidence.
+- [Playwright Python — launch_persistent_context](https://playwright.dev/python/docs/chrome-extensions) — persistent context with user_data_dir saves cookies, localStorage, session tokens across runs; headed mode required for extensions and Discord session. HIGH confidence.
+- [Playwright Python — Frames](https://playwright.dev/python/docs/frames) — `page.frame_locator()` for iframe content; `wait_for_load_state()` for load detection; canvas inside iframe has no DOM — requires `evaluate()` or screenshot for state. HIGH confidence.
+- [Playwright Python — Screenshots](https://playwright.dev/python/docs/screenshots) — `page.screenshot()` returns bytes without writing file; `clip` parameter for region capture; `locator.screenshot()` for element-specific capture. HIGH confidence.
+- [Playwright Tips — Clicking at Offset](https://www.weekly.playwright-user-event.org/tip-11-clicking-at-an-offset-inside-an-element.html) — `locator.click(position={x, y})` for offset clicks within element bounding box; `page.mouse.click(x, y)` for absolute page coordinates. HIGH confidence.
+- [Playwright Python — Authentication](https://playwright.dev/docs/auth) — `storageState` for session persistence; `launch_persistent_context(user_data_dir=...)` for full browser profile reuse. HIGH confidence.
+- [Discord — Automated User Accounts (Self-Bots)](https://support.discord.com/hc/en-us/articles/115002192352-Automated-User-Accounts-Self-Bots) — Explicit TOS prohibition; automated user accounts result in permanent account termination. HIGH confidence.
+- [Discord — How Activities Work](https://discord.com/developers/docs/activities/how-activities-work) — Activities load in an iframe within Discord; SDK handshake via postMessage; no programmatic API for game state. HIGH confidence.
+- [BrowserStack — Playwright Bot Detection](https://www.browserstack.com/guide/playwright-bot-detection) — Headless Chromium exposes `navigator.webdriver`, zero plugins, screen dimension fingerprints; headed mode with real display avoids these signals. MEDIUM confidence.
+- [Game automation loop patterns](https://ben.land/post/2021/05/21/automating-computer-games/) — Screenshot-analyze-click loop; decision tree against screen state; VNC virtual desktop for headless-but-not-headless execution. MEDIUM confidence.
+- [Playwright — Frame Locator API](https://playwright.dev/python/docs/api/class-framelocator) — `page.frame_locator(selector)` creates auto-waiting iframe locator; strict mode throws if multiple frames match. HIGH confidence.
+- [LambdaTest Community — iframe bounding box](https://community.lambdatest.com/t/how-can-you-get-the-bounding-box-of-an-iframe-in-playwright-to-capture-only-that-specific-area-in-a-screenshot/48022) — `elementHandle.boundingBox()` returns iframe position relative to main viewport; use with `page.screenshot(clip=...)` for region capture. MEDIUM confidence.
 
 ---
 
-*Feature research for: Discord word game AI bot — v1.1 Vision + Discord + Autonomous*
+*Feature research for: Browser automation + autonomous play (v1.2)*
 *Researched: 2026-03-24*

@@ -1,8 +1,8 @@
 # Pitfalls Research
 
-**Domain:** Discord word game AI bot — v1.1 addition of vision, Discord bot, and browser automation to existing Python word engine
+**Domain:** Browser automation + autonomous play addition to existing Discord bot (Letter League Bot v1.2)
 **Researched:** 2026-03-24
-**Confidence:** MEDIUM-HIGH (Playwright, discord.py, Claude Vision API verified against official docs and GitHub issues; Letter League-specific behaviors require live testing)
+**Confidence:** MEDIUM-HIGH (Playwright async/canvas/iframe behaviors verified against official docs and GitHub issues; Discord Activity iframe selectors and turn-detection signals are LOW confidence — require live inspection)
 
 ---
 
@@ -11,200 +11,247 @@
 ### Pitfall 1: Playwright Sync API Inside discord.py's Async Event Loop
 
 **What goes wrong:**
-Playwright ships two Python APIs: `sync_playwright()` and `async_playwright()`. discord.py owns an asyncio event loop from startup. If any code calls `sync_playwright()` inside a discord.py coroutine or event handler — or in a module imported by one — Python raises `RuntimeError: This event loop is already running` and the bot freezes or crashes. The bot appears to accept the command but never responds.
+Playwright ships two Python APIs: `sync_playwright()` and `async_playwright()`. discord.py owns an asyncio event loop from startup. Any code calling `sync_playwright()` inside a discord.py coroutine or event handler — or in a module imported by one — raises `RuntimeError: This event loop is already running` and freezes or crashes the bot. The bot appears to accept the command but never responds, and all subsequent commands also fail until the process is restarted.
 
 **Why it happens:**
-Developers who learned Playwright from web testing tutorials use `sync_playwright()` by habit. The sync API internally creates its own event loop. When the running loop already exists (discord.py's), conflict is immediate. This mistake is documented as the most frequent Python async integration bug in the discord.py FAQ.
+Playwright tutorials and the official Python quickstart default to the synchronous API because it is simpler to demonstrate. Developers who copy those examples into a discord.py bot hit the conflict immediately. The error message (`It looks like you are using Playwright Sync API inside the asyncio loop`) is clear only if the exception propagates; silent hangs are more common when the error is swallowed by a bare `except`. This is documented as the most frequent Python async integration issue in Playwright's GitHub issues (#462, #2053, #2705).
 
 **How to avoid:**
-Use `playwright.async_api` exclusively. Every Playwright call must be inside an `async with async_playwright() as p:` block inside an `async def` function. Launch the browser once at bot startup and keep the context alive across turns — do not re-launch per command. Never import or call `sync_playwright` anywhere in the codebase. Validate by running a discord.py command that triggers a Playwright action and confirming the bot remains responsive to other commands during execution.
+Use `playwright.async_api` exclusively — never import `sync_playwright`. Every Playwright call must live inside `async def` functions using `async with async_playwright() as p:`. Launch the browser once at bot startup and keep the context alive across turns; do not re-launch per command. Use `await asyncio.to_thread()` only for CPU-bound Python work (e.g., word engine calls), not for Playwright — Playwright's async API integrates directly into the event loop without thread offloading.
 
 **Warning signs:**
 - `RuntimeError: This event loop is already running` in logs
-- `RuntimeError: There is no current event loop` when called from spawned threads
-- Bot accepts a command but freezes and produces no response
-- Other bot commands stop working immediately after the first Playwright interaction
+- Bot accepts a slash command but produces no response and freezes for other commands
+- `It looks like you are using Playwright Sync API inside the asyncio loop` exception
+- Other bot commands stop responding after the first Playwright interaction
 
 **Phase to address:**
-Browser automation foundation phase — this must be the first thing verified before any game logic is built on top.
+Browser automation foundation — validate a discord.py command successfully triggers a Playwright action (navigate + screenshot) without blocking other concurrently received commands. This is the first test gate before any game logic is built.
 
 ---
 
 ### Pitfall 2: Canvas Screenshot Blank in Headless Chromium
 
 **What goes wrong:**
-Letter League renders its game board as an HTML5 `<canvas>` element inside a Discord Activity iframe. In Playwright headless mode, `page.screenshot()` captures the surrounding UI but the canvas area is solid white or solid black. The vision pipeline receives an image with no board content and either errors, returns an empty board, or — worst case — hallucinates a plausible-looking board that bears no relation to the actual game state.
+Letter League renders the game board as an HTML5 `<canvas>` inside the Discord Activity iframe. In headless Chromium, `page.screenshot()` captures the Discord UI chrome but the canvas area is solid white or solid black. The vision pipeline receives a contentless image and either errors, returns an empty board, or silently returns a hallucinated plausible board. There is no exception — the pipeline appears to succeed.
 
 **Why it happens:**
-Canvas content is rendered asynchronously by JavaScript. In headless Chromium, if the screenshot is taken before the JavaScript rendering loop has composited the canvas frame, the output is blank. This is documented in Playwright GitHub issue #19225 (reported 2022; closed because the solution is a wait strategy, not a Playwright code change). Additionally, Playwright v1.49 (November 2024) switched to a new headless Chromium implementation that changes timing behavior and requires updating test suites that previously worked.
+Canvas content is rendered asynchronously by JavaScript. In headless Chromium without GPU acceleration, the canvas compositing pipeline does not flush before the screenshot is taken. This is a documented and confirmed behavior — Playwright GitHub issue #19225 (reported 2022, still referenced in 2024) confirms the root cause is rendering timing, not a Playwright defect. Playwright v1.49 (November 2024) switched to a new headless Chromium implementation that changes timing behavior and broke previously working canvas tests (issue #33566). Additionally, headless Chromium by default has no GPU; WebGL/Canvas-heavy apps degrade or go blank without `--use-gl=egl` or equivalent flags.
 
 **How to avoid:**
-- Do not take the screenshot immediately after navigation. Wait for a game-specific signal that the board has fully rendered: a UI button that only appears post-load, a canvas non-blank pixel check, or a `waitForFunction` that polls `canvas.width > 0`.
-- Use `await page.wait_for_load_state("networkidle")` as a baseline, then add a game-specific wait on top.
-- Test canvas capture in both headed and headless mode before building the vision pipeline. If headed works but headless doesn't, the issue is rendering timing, not a code bug.
-- As a fallback if timing waits don't resolve the issue: inject JavaScript to extract canvas pixel data directly — `await page.evaluate("document.querySelector('canvas').toDataURL('image/png')")` — and decode the base64 result as a PIL image. This bypasses the screenshot compositing path entirely.
-- After Playwright v1.49+, test with both `chromium` and `chromium:new` channel options if canvas rendering regresses.
+- Do not screenshot immediately after navigation. Wait for a game-specific render signal: a UI element that only appears after board load, a `wait_for_function` that polls `canvas.width > 0` and then waits an additional frame, or visual confirmation via pixel sampling.
+- Use `await page.wait_for_load_state("networkidle")` as a baseline, then add a game-specific wait on top — networkidle alone is insufficient for canvas apps that continue rendering after initial load.
+- As a primary fallback: inject JavaScript inside the iframe frame to extract the canvas pixel data directly — `await frame.evaluate("document.querySelector('canvas').toDataURL('image/png')")` — and decode the base64 result as a PIL image. This bypasses the screenshot compositing path entirely and is more reliable than screenshot for cross-origin canvas content.
+- Launch Chromium with `args=["--use-gl=egl"]` or headed mode (`headless=False`) to enable GPU compositing. On Linux production servers, use Xvfb as a virtual display for headed mode.
+- After Playwright v1.49+, test with `channel="chromium"` vs the default build if canvas rendering regresses.
 
 **Warning signs:**
-- Screenshots show Discord UI chrome (toolbar, buttons) but the board area is uniformly white or black
-- Vision pipeline returns empty board or claims no tiles are placed despite an active game
-- Behavior works in headed mode (`headless=False`) but fails in headless mode (`headless=True`)
-- Board reading worked in dev environment but fails in production server (headed vs. headless difference)
+- Screenshots show Discord UI (buttons, sidebar) but the board area is uniformly white or black
+- Vision pipeline returns an empty board or claims no tiles exist on an active game
+- Canvas capture works in headed mode (`headless=False`) but fails in headless mode
+- Bot worked in dev (Windows headed) but fails on production Linux server (headless)
 
 **Phase to address:**
-Browser automation foundation phase — validate canvas screenshot captures actual board content in headless mode before any vision or click automation is built.
+Browser automation foundation — time-box a spike (max 2 days) specifically to prove canvas screenshot captures actual game board content in both headed and headless modes before any further automation is built on it. Accept `canvas.toDataURL()` injection as the primary method if screenshot is unreliable.
 
 ---
 
-### Pitfall 3: Vision LLM Hallucination on Ambiguous Game Tiles
+### Pitfall 3: Discord Activity iframe Selectors Are Undocumented
 
 **What goes wrong:**
-Claude Vision returns a confident, structurally valid JSON board that contains 1-3 wrong tile letters. The word engine receives this data, finds a legal word placement, and the bot recommends or plays a move based on tiles that don't actually exist. In advisor mode, the user follows the advice and the game rejects the word. In autonomous mode, the bot places tiles and the game either rejects the move or silently records an incorrect sequence. The error is invisible without explicit validation — no exception is raised, the pipeline appears to succeed.
+Letter League runs as an embedded iframe inside Discord's web client. The iframe's `src` attribute points to a `*.discordsays.com` URL (Discord proxies all Activity traffic through this domain per their developer docs). The exact selector — whether by `src` URL pattern, `title`, `name`, `data-*` attribute, or DOM position — is not publicly documented. Developers who guess a selector ship code that fails silently in production: `page.frame_locator()` returns a locator that matches nothing, all subsequent game element lookups return zero results, and clicks do nothing, with no exception raised until an action is actually attempted.
 
 **Why it happens:**
-Claude's documented limitations include reduced accuracy on: images where text is very small relative to image size (Letter League tiles at normal Discord resolution may be 20-30px), stylized or custom fonts with decorative elements, and spatially dense layouts requiring counting large numbers of small objects. Visually similar characters — `I` / `l` / `1`, `O` / `0`, `W` / `M` upside down — are common confusion pairs. The 27x19 grid at typical screenshot resolution means individual tiles can be well under the 200px minimum threshold where Anthropic documents quality degradation.
+Discord's web client is a React SPA with dynamically generated class names that change with every client deployment. No public documentation describes the DOM structure of the voice channel Activity container. Developers make assumptions based on how Activities are described conceptually ("it's an iframe"), write `frame_locator('iframe')` which may match the wrong iframe if Discord has multiple iframes in the view, and do not validate the selector against the live client before building game logic.
 
 **How to avoid:**
-- Crop the screenshot to the board region only before sending to Claude. A 1920x1080 full-screen Discord capture gives each tile approximately 15-25px; a board-only crop at 2x upscaling gives 40-60px per tile. Anthropic explicitly recommends images with text be legible, not small.
-- Request structured JSON output using a schema with explicit per-row representation. Use Claude's tool-use / structured output feature rather than asking for JSON in a plain text response — structured output guarantees schema compliance (no stray text, no truncation).
-- Include a cross-validation step: after extraction, verify that every word on the board is a valid dictionary word at its reported position. A single invalid word at a claimed position is a strong hallucination signal.
-- For tiles the model rates as uncertain (prompt it to flag these), re-send a cropped sub-image of just that tile region.
-- Images must be above 200px per edge for reliable quality. For a 27-column board, the full-board crop must be at least 5400px wide, or individual tile crops must be prepared.
+- Before writing any automation code, open Discord web client in headed Playwright with a real voice channel + Letter League game running. Use `playwright codegen` or browser DevTools to inspect the DOM and find the exact selector for the Letter League iframe — expect it to match on `src` containing `discordsays.com` plus the Letter League application ID.
+- Use a URL-pattern selector rather than position: `frame_locator('[src*="discordsays.com"]')` is more stable than `frame_locator('iframe:nth-child(2)')`. If multiple discordsays.com iframes exist, narrow by the Letter League activity application ID.
+- Treat this as an explicit spike deliverable: document the confirmed selector string with a screenshot of the DevTools inspection. Gate all subsequent automation work on this confirmed selector.
+- Discord deploys the web client frequently. Build in a selector validation check at browser startup: if the iframe frame cannot be located within 10 seconds of Activity launch, log a specific "iframe selector no longer valid" error rather than a generic timeout.
 
 **Warning signs:**
-- Bot recommends words using tiles that the user does not have in their rack or on their board
-- Board representation from successive reads of the same unchanged board differs between calls
-- Vision output contains words already on the board but with 1-2 letters changed
-- JSON extraction succeeds but word engine finds no valid moves on what should be a normal board position
+- `page.frame_locator(selector).locator('canvas').count()` returns 0 when the game is visually running
+- `FrameDetachedError` or `Target closed` on the first interaction inside the supposed iframe
+- Automation works against the game's direct `discordsays.com` URL but fails through `discord.com`
+- Canvas click coordinates land completely off-target (wrong element is in scope)
 
 **Phase to address:**
-Vision pipeline phase — measure per-tile error rate on 20+ ground-truth screenshots before connecting the vision output to the word engine. Gate the phase on achieving an acceptable error rate (target: <2% per-tile, <5% per-board-read with no catastrophic errors).
+Browser automation foundation — completing the DevTools inspection spike and documenting the confirmed iframe selector is a mandatory precondition for the foundation phase. No game logic code is written until this is verified.
 
 ---
 
-### Pitfall 4: Interaction Token Timeout Freezing the Bot
+### Pitfall 4: Canvas Click Coordinates Use Viewport Space, Not Canvas-Internal Space
 
 **What goes wrong:**
-Discord slash command interactions have a 3-second acknowledgment window. If the bot does not respond within 3 seconds of receiving the slash command, Discord marks the interaction as failed and shows the user "The application did not respond." The vision API call (network round-trip + model inference) typically takes 4-15 seconds. A bot that does not defer immediately before starting async work will consistently timeout on every board analysis command.
+Tile placement requires clicking specific board cells on the canvas. Developers calculate tile positions using board grid math (column index × tile width, row index × tile height) and pass those as absolute viewport coordinates to `page.mouse.click(x, y)`. The clicks land in the wrong location — consistently offset by the iframe origin plus the canvas element's position within the iframe. On high-DPI displays, an additional devicePixelRatio scaling error multiplies the offset.
 
 **Why it happens:**
-Developers write the handler to process first and respond after, following the natural imperative flow: "receive screenshot, analyze it, send result." Discord's interaction model requires the opposite: acknowledge first (which buys a 15-minute follow-up window), then do work, then edit the deferred response with results.
+`page.mouse` operates in CSS pixels relative to the viewport origin. The canvas element is inside a cross-origin iframe, so its visual position is: viewport offset to iframe + iframe offset to canvas + canvas-internal position. Developers who compute only the canvas-internal grid position (the last component) miss the first two offsets entirely. The Playwright docs note that "The Mouse class operates in main-frame CSS pixels relative to the top-left corner of the viewport" (Playwright API class-mouse). This is a known issue tracked in Playwright GitHub issue #3170 (cross-origin iframe coordinate calculation omits iframe offset). Additionally, Discord's web client may be rendered at device pixel ratios other than 1.0 on HiDPI screens, causing an additional 2× coordinate scaling error.
 
 **How to avoid:**
-- The first line in any slash command handler that does async work must be `await interaction.response.defer()` (or `defer(ephemeral=True)` for private responses). This immediately sends a "thinking..." indicator to Discord and extends the response window to 15 minutes.
-- Use `await interaction.followup.send(...)` to deliver the final result. Never use `interaction.response.send_message(...)` after deferring — it will fail with `InteractionResponded`.
-- Structure the handler as: defer → kick off async task → await task → followup. Do not use `asyncio.gather` to run deferral and work simultaneously; defer must complete first.
+- Use `canvas_element.click(position={"x": tile_x_offset, "y": tile_y_offset})` rather than `page.mouse.click()`. The `position` argument on an element-scoped click is relative to the element's bounding box, automatically accounting for iframe offset. The offset must stay inside the element's bounding box or Playwright raises an error.
+- Verify the canvas element's `getBoundingClientRect()` inside the iframe frame to confirm its reported dimensions match the visual size before building the tile coordinate formula.
+- Launch the browser with a fixed `device_scale_factor=1` to eliminate HiDPI scaling ambiguity during development. Validate coordinate mapping by clicking a known position (e.g., the exact center of a tile visible in the screenshot) and confirming the game registers that tile as selected.
+- Build a coordinate calibration function: given the canvas element's bounding box (width × height) and the current board grid dimensions, derive the cell size and origin offset. Never hardcode pixel offsets from development screenshots.
 
 **Warning signs:**
-- "The application did not respond" appears in Discord after using the `/analyze` command
-- Works in local development (fast network, fast model) but fails in production
-- Works when the word engine runs quickly but fails when vision API is slow
+- Tile clicks register on wrong board cells — consistently offset in one direction by the same amount
+- Rack tile selection clicks do nothing or select the wrong tile
+- Coordinate math produces correct results when tested against the game's standalone URL but is systematically wrong inside Discord
+- Clicks work at devicePixelRatio=1 but are off by 2× on a HiDPI monitor
 
 **Phase to address:**
-Discord advisor mode integration phase — implement the defer pattern from the very first handler, not as a later fix.
+Browser automation foundation — implement and validate coordinate mapping as an explicit deliverable before turn detection and tile placement logic is written. Test by clicking 5 known tile positions and confirming correct game response.
 
 ---
 
-### Pitfall 5: Word Engine Blocking the Discord Event Loop
+### Pitfall 5: Session Token Expiry and Re-Authentication Handling
 
 **What goes wrong:**
-The existing v1.0 word engine (GADDAG move generation) is pure CPU-bound Python. Calling it synchronously inside a discord.py async handler blocks the entire asyncio event loop for the duration of move generation. During this time, the bot cannot receive new messages, respond to other commands, or send the "typing" indicator. In observed Scrabble-engine benchmarks, move generation on a complex board can take 1-5 seconds. During that window, all discord.py I/O — including maintaining the gateway heartbeat — is frozen. Discord may interpret a missed heartbeat as a connection failure and disconnect the bot.
+The bot uses a Playwright persistent browser context (`launch_persistent_context`) with a saved Discord login to avoid re-authenticating every run. Discord's session tokens have a finite lifetime. When the token expires — Discord does not publish the expiry duration, but community reports suggest 7-30 days — the next bot restart launches to a Discord login page instead of the Discord client. If there is no expiry detection, the bot silently "navigates" and all subsequent page actions operate against the login page rather than a game, producing opaque errors.
 
 **Why it happens:**
-The engine was built as a standalone synchronous library (correct for v1.0). Adding Discord integration without adapting the call pattern is the natural mistake — the engine function looks like a normal Python function call, and wrapping it in `asyncio.run_in_executor` is non-obvious.
+Developers who implement session persistence assume "it will work until I notice it doesn't." The persistent context userDataDir correctly stores cookies and localStorage on first login, but Discord's auth token has a TTL. There is no Playwright API to introspect cookie expiry at startup. The bot runs for weeks, then at an arbitrary restart, begins failing. The error is distant in time from the cause (the session expired days earlier), making diagnosis non-obvious.
 
 **How to avoid:**
-- Wrap all synchronous word engine calls in `await loop.run_in_executor(None, engine_function, *args)`. This runs the synchronous engine in a thread pool worker, freeing the event loop to process Discord events.
-- Alternatively, use `asyncio.to_thread(engine_function, *args)` (Python 3.9+, simpler syntax).
-- The engine itself does not need to change — just the call site in the Discord handler.
-- Test the fix by running move generation while simultaneously sending other bot commands; both should process without blocking each other.
+- At each bot startup, after loading the persistent context, navigate to `discord.com` and check for a login redirect before proceeding. If the URL ends up at `/login`, trigger a re-authentication routine instead of attempting game navigation.
+- Store the timestamp of the last successful login in a sidecar file next to the `userDataDir`. If the session is older than 7 days, proactively refresh it (even if the token hasn't yet expired) by running the login flow.
+- Use `launch_persistent_context` (not `browser.new_context(storage_state=...)`) for the automation account: persistent context preserves the full browser profile including session cookies across restarts via the userDataDir on disk. Storage state alone does not persist session storage, which Discord may use.
+- Separate the login session file from the bot's source code directory. Add the userDataDir path to `.gitignore`. The session directory contains live Discord tokens.
 
 **Warning signs:**
-- Bot stops responding to all commands during move generation
-- `discord.py` logs `Shard ID None heartbeat blocked for more than X seconds`
-- Gateway connection drops and reconnects during long move generation runs
-- `/ping` command doesn't respond while `/analyze` is processing
+- Bot starts but navigation fails to reach a game channel after successful startup
+- Playwright logs a redirect to `discord.com/login` during startup navigation
+- `page.url` is `discord.com/login` when game automation actions begin
+- Bot worked the previous week but now produces `ElementNotFound` errors for game-specific elements
 
 **Phase to address:**
-Discord advisor mode integration phase — add executor wrapping in the first handler that calls the word engine; test concurrent command handling explicitly.
+Browser automation foundation — implement session validation and re-authentication detection as part of the browser startup routine, before any game navigation code is written.
 
 ---
 
-### Pitfall 6: Board State Drift from Accumulated Per-Turn Errors
+### Pitfall 6: Turn Detection Relies on an Unverified UI Signal
 
 **What goes wrong:**
-The autonomous mode maintains a running model of the board across turns. Each vision read has some small error rate. When these errors accumulate across 15-20 turns, the bot's internal board model diverges from the actual game state. The bot evaluates moves against a wrong board — finding word placements that collide with tiles the bot misread as empty, or missing high-value placements because the bot thinks certain squares are occupied. In later turns, the bot's move suggestions become progressively less useful.
-
-Additionally, Letter League's board is expandable beyond 27x19. If the board grows by one row or column and the coordinate system isn't updated, every absolute position in the bot's model shifts by one cell. All subsequent placements land in the wrong position.
+The bot must know when it is its turn to play. Without a Discord Activity API, turn detection must be done visually: polling screenshots and detecting a state change, observing a DOM element inside the iframe that indicates whose turn it is, or watching for a timer or UI button becoming active. Developers pick a hypothetical signal ("the submit button becomes enabled when it's my turn") and build the entire turn-detection and play loop around it — then discover in live testing that the signal does not exist, is unreliable, or appears identically for other players' turns.
 
 **Why it happens:**
-Developers treat per-turn board reading as "accurate enough" and track only deltas (new tiles placed this turn) to avoid the cost of a full re-read. This works for the first few turns but compounds. The expanding board is an additional dimension not present in standard Scrabble, making coordinate drift more likely.
+Letter League's UI signals are not documented. Developers assume the game's UI works the same as standard Scrabble implementations they have seen, then find the actual Discord Activity version uses different UI affordances. Turn detection is treated as a design decision that can be figured out later, so it gets deferred until the autonomous play phase — at which point the entire play loop must be reworked.
 
 **How to avoid:**
-- Treat every turn's vision output as the complete authoritative board state. Never accumulate delta updates. Re-read the full board from a fresh screenshot each turn, even if it costs one extra API call.
-- After each read, run a consistency check: every tile from the previous board must exist in the new board (tiles never disappear in a word game). If consistency fails, this is a read error; retry before accepting the new board state.
-- Detect board expansion by comparing grid dimensions between turns. When new rows or columns appear, recalculate all coordinate mappings before placing tiles.
-- Never persist board state across a bot restart. Always begin a session with a fresh full-board read.
+- Treat turn-detection signal identification as a research spike that must be completed before autonomous play implementation begins. Manually play at least 2 full games with DevTools open and document: what DOM elements change when it becomes your turn; what pixel regions change; what text or button states are unique to "your turn" vs "opponent's turn".
+- Implement visual-diff based turn detection as a fallback: take a reference screenshot at the start of each opponent turn; poll for screenshots that differ by more than a threshold; treat a significant change as a turn transition signal. This is less precise but does not rely on a specific UI element.
+- Do not hardcode an assumed turn signal — make the detection strategy a configuration parameter so it can be updated without a code rewrite when the signal is confirmed or changes.
+- Time-box the spike at 4 hours. If no reliable DOM signal is found, commit to the visual-diff approach and document the limitation.
 
 **Warning signs:**
-- Bot recommends or plays moves that the game rejects as invalid (collision with existing tile)
+- Autonomous play loop either never fires (bot doesn't detect its turns) or fires every screenshot poll cycle (bot acts on every state regardless of turn)
+- Bot attempts to place tiles during another player's turn and the game rejects the input
+- Turn detection worked in early testing but stops working after a Discord client update (UI change)
+
+**Phase to address:**
+Autonomous play — turn detection is the highest-risk deliverable in this phase. Do the live observation spike first, before writing any polling or observation code.
+
+---
+
+### Pitfall 7: Headed Browser Detected as Automation (Discord Anti-Bot Measures)
+
+**What goes wrong:**
+Discord's login and client flow includes heuristic checks for automation. Headless Chromium is detected immediately (the `navigator.webdriver` property is `true`, the user agent contains "HeadlessChrome", and WebGL renderer strings differ from real browsers). Discord redirects headless sessions to CAPTCHA or phone verification. Even headed Playwright exposes detectable fingerprints via `navigator.webdriver = true`. Discord may lock or ban the automation account for suspicious login patterns.
+
+**Why it happens:**
+Playwright by default exposes `navigator.webdriver = true` in all launched browsers — this is a standard WebDriver flag that anti-bot systems check first. Headless Chromium further lacks plugins, has a distinct user-agent, and has unusual screen/window metrics. Discord specifically has been documented by the community to perform these checks on login attempts.
+
+**How to avoid:**
+- Always use headed Chromium (`headless=False`). On Linux production, use Xvfb as a virtual framebuffer: `xvfb-run python bot.py` or launch Xvfb programmatically. This is already an established requirement in the project's "out of scope" constraints.
+- Use `chromium.launch(args=["--disable-blink-features=AutomationControlled"])` to suppress the `navigator.webdriver` flag. This is the minimal stealth configuration needed.
+- Maintain human-paced interaction timing: 1-3 second delay between individual tile placements, 2-5 seconds between major UI state transitions (navigating to voice channel, starting Activity). Burst-clicking is a strong bot signal.
+- Do the manual login once with a real browser, save the persistent context `userDataDir`, and use that for all subsequent runs — this avoids triggering the login flow repeatedly from an automation context.
+- Use a consistent user-agent string that matches a real Chrome version rather than the Playwright default.
+
+**Warning signs:**
+- Discord login page shows a CAPTCHA during automated login
+- "Suspicious login from new location" email sent to the automation account
+- Account locked with "Verify your account" prompt that requires phone number
+- Login completes but immediately redirects to a 2FA or verification page
+
+**Phase to address:**
+Browser automation foundation — validate the headed + `--disable-blink-features=AutomationControlled` configuration successfully completes Discord login without triggering CAPTCHA or verification, before any navigation logic is built.
+
+---
+
+### Pitfall 8: iframe Frame Reference Becomes Invalid After Reconnect
+
+**What goes wrong:**
+The bot stores a reference to the Letter League iframe frame object (e.g., `frame = page.frame_locator('[src*="discordsays.com"]')`). Discord's voice channel Activity may reload the iframe if the user reconnects, if the voice channel idles, or if Discord's client performs a soft navigation. After reload, the stored frame reference is detached — all subsequent locator operations on it raise `FrameDetachedError`. The error looks like a transient network issue but is actually a stale object reference.
+
+**Why it happens:**
+Playwright's `frame_locator()` returns a locator object that lazily re-evaluates the frame on each interaction. However, if developers store the result of `locator.frame_element()` or cache the underlying `Frame` object (rather than the `FrameLocator`), the cached object becomes invalid the moment the iframe's DOM node is replaced. Discord's SPA architecture replaces iframe DOM nodes frequently. This is a documented Playwright issue (GitHub issue #2753, #33674).
+
+**How to avoid:**
+- Never cache a `Frame` or `FrameElement` object between turns. Always re-derive the frame locator from `page.frame_locator(selector)` at the start of each action sequence.
+- Wrap all iframe-scoped actions in a retry block: catch `FrameDetachedError` and `TargetClosedError`, re-acquire the frame locator, and retry once before raising.
+- Add a health-check at the start of each turn: verify the iframe locator resolves to an element before attempting any game action. If it does not resolve within 5 seconds, log "Activity iframe lost — re-navigating" and navigate back to the voice channel to reload the Activity.
+- Use `page.frame_locator(selector)` (returns `FrameLocator`) rather than `page.frames` list indexing (returns `Frame`) — `FrameLocator` is designed for lazy re-evaluation and is more resilient to iframe replacement.
+
+**Warning signs:**
+- `FrameDetachedError` or `net::ERR_ABORTED; maybe frame was detached?` after a period of inactivity
+- Game automation fails midway through a game session but works at session start
+- Error frequency increases after Discord voice channel reconnects or network drops
+- `page.frames` list length changes between turns
+
+**Phase to address:**
+Browser automation foundation — implement re-acquisition retry logic in the iframe access layer before game actions are built. Test explicitly by simulating an Activity reload (manually leave and rejoin the voice channel) during an automated run.
+
+---
+
+### Pitfall 9: Board State Drift From Accumulated Per-Turn Vision Errors
+
+**What goes wrong:**
+The autonomous mode maintains a running board model across turns. Each vision read has a small per-tile error rate. When errors accumulate over 15-20 turns, the bot's internal board model diverges from the actual game state. The bot evaluates moves against the wrong board, finds placements that collide with tiles it misread as empty, or misses high-value placements because it believes squares are occupied. Letter League's expandable board adds a second dimension of drift: when the board grows by one row or column and the coordinate system isn't updated, every absolute position shifts by one cell.
+
+**Why it happens:**
+Developers treat per-turn board reading as "accurate enough" and track only deltas (new tiles this turn) to save API cost. This works for early turns but compounds. The expanding board dimension is absent from standard Scrabble implementations, so developers don't anticipate it.
+
+**How to avoid:**
+- Treat every turn's vision output as the complete authoritative board state. Never accumulate delta updates. Re-read the full board from a fresh screenshot each turn.
+- After each read, run a consistency check: every tile from the previous turn's board must appear in the new board (tiles never disappear). If consistency fails, retry the read before accepting the new board state.
+- Detect board expansion by comparing reported grid dimensions between turns. When new rows or columns appear, recalculate all coordinate mappings before placing tiles.
+- Never persist board state across a bot restart. Always begin with a fresh full-board read.
+
+**Warning signs:**
+- Bot recommends moves the game rejects as invalid (collision with an existing tile)
 - Bot's calculated score for a move does not match what the game awards
-- Error frequency in move rejection increases in turns 10+ of the same game
+- Move rejection rate increases noticeably in turns 10+ of the same game
 - Bot places a tile one row or column off from the intended position
 
 **Phase to address:**
-Board vision/OCR phase — design the board model as ephemeral-per-turn from the start, before autonomous mode is added.
+Autonomous play — design the board model as ephemeral-per-turn from the start. Add consistency validation before any tile placement action.
 
 ---
 
-### Pitfall 7: Self-Bot TOS Violation — Automating a Discord User Account
+### Pitfall 10: Self-Bot TOS Violation — Automating a Discord User Account
 
 **What goes wrong:**
-Discord Activities (including Letter League) require a human user account to join a voice channel and interact with the game. The only automation path is to drive a user account via Playwright. Discord explicitly prohibits automating user accounts ("self-bots") under its Terms of Service and has actively banned accounts for this behavior since 2017, with enforcement intensifying 2021-2023. A banned account ends the autonomous mode permanently. If a personal account is used instead of a dedicated throwaway, the consequences extend to the user's main Discord presence.
+Discord Activities require a human user account to join a voice channel and interact with the game. The only automation path is to drive a user account via Playwright. Discord explicitly prohibits automating user accounts ("self-bots") under its Terms of Service (support article "Automated User Accounts (Self-Bots)"). Discord has actively banned accounts for this since 2017, with enforcement intensifying in 2021-2023. A banned account ends the autonomous mode permanently. If a personal account is used instead of a dedicated throwaway account, the consequences extend to the user's main Discord presence.
 
 **Why it happens:**
-Discord Activities do not expose a bot API. Bots cannot join voice channels as game participants or interact with Activities via the Discord API. The automated browser path is the only technically viable option. Developers implement it without fully registering the TOS risk or the enforcement history.
+Discord Activities do not expose a bot-accessible API. The automated browser path is the only technically viable option for playing the game. Developers implement it without fully registering the TOS risk or the enforcement history.
 
 **How to avoid:**
-- Use a dedicated, isolated Discord account created solely for automation. Never use a personal account for the browser-automated player.
-- Keep the discord.py bot account (API bot token) and the Playwright-driven account strictly separate — using the Discord API and browser automation on the same account is a strong self-bot detection signal.
-- Maintain human-paced interaction timing: 1-3 second delays between tile placements, 2-5 seconds between major UI actions. Do not perform burst clicks.
-- Explicitly document the TOS risk in the bot's setup guide. Users must understand they are using a dedicated throwaway account and accept the risk of that account being banned.
-- For advisor mode, there is zero TOS risk — the bot receives a screenshot from the user and responds via the Discord API. Build and ship advisor mode first.
+- Use a dedicated, isolated Discord account created solely for this automation. Never use a personal account for the Playwright-driven player.
+- Keep the discord.py bot account (API bot token) and the Playwright-driven user account strictly separate. Combining API automation and browser automation on the same account is a strong detection signal.
+- Maintain human-paced timing: 1-3 second delays between tile placements, 2-5 seconds between major navigation steps.
+- Document the TOS risk explicitly in the project's setup guide. Anyone deploying autonomous mode must acknowledge they are using a dedicated throwaway account and accept the risk of that account being banned.
 
 **Warning signs:**
-- Discord prompts for phone/CAPTCHA verification during the automated login
-- The automation account receives a "suspicious login from new location" email
+- Discord prompts for CAPTCHA or phone verification during automated login
+- The automation account receives a "suspicious login" email
 - Account is temporarily locked or suspended
-- Discord redirects the automated login to a verification page instead of completing login
 
 **Phase to address:**
-Autonomous mode design — document and communicate TOS risk before any implementation begins. Build advisor mode first as it carries zero TOS risk and delivers core value independently.
-
----
-
-### Pitfall 8: iframe Cross-Origin Blocking Playwright Element Interaction
-
-**What goes wrong:**
-Letter League runs as an embedded iframe inside Discord's web client. The iframe loads the game from a different origin than `discord.com`. Playwright locators written against `page` find nothing inside the iframe — they operate in the outer Discord page context, not the game's frame context. Automation code that works when tested against the game's standalone URL fails completely inside Discord. Canvas click coordinates must also be calculated relative to the canvas element's bounding box within the iframe, not the viewport.
-
-**Why it happens:**
-Browsers enforce the Same-Origin Policy, creating a separate execution context for cross-origin iframes. Developers write `page.locator(...)` selectors and are surprised when they match zero elements that are visually present — because the elements live in the iframe's context, not the page's. Additionally, the exact URL or attribute used to identify Letter League's iframe within Discord's web client is not publicly documented and requires live inspection.
-
-**How to avoid:**
-- Use `page.frame_locator(selector)` to scope all game interaction to the iframe context. Identify the iframe by its `src` URL pattern (e.g., `[src*="letter-league"]` or the actual Activity URL) rather than by position — position-based iframe indexing breaks if Discord adds other iframes.
-- Determine the correct iframe selector by inspecting the Discord web client in headed mode with browser DevTools before writing any automation code. Do this as an explicit spike before building game logic.
-- All canvas clicks must use coordinates relative to the canvas element's bounding box: `await canvas.click(position={"x": tile_x, "y": tile_y})` where `tile_x` and `tile_y` are offsets from the canvas element's top-left corner, not the viewport.
-- Test frame access in isolation — confirm you can successfully locate and click a static UI element inside the iframe before building any dynamic tile placement.
-
-**Warning signs:**
-- `page.locator(...)` returns 0 elements for elements visually present in the game
-- `ElementHandle.click()` throws `target closed` or `frame detached` errors
-- Automation works against the game's direct URL but fails when accessed through Discord
-- Canvas clicks land in the wrong position relative to where tiles should be placed
-
-**Phase to address:**
-Browser automation foundation phase — validate iframe access and canvas coordinate calculation as isolated engineering problems before game logic is built.
+Autonomous play design — document and communicate the TOS risk before implementation begins. The project already calls this out in its out-of-scope constraints. Build and test advisor mode independently since it carries zero TOS risk.
 
 ---
 
@@ -214,14 +261,14 @@ Shortcuts that seem reasonable but create long-term problems.
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Hardcode 27x19 board dimensions | Simplifies coordinate math | Breaks on any board expansion; the game is designed to grow | Never — board expansion is a core mechanic; detect dimensions dynamically |
-| Accumulate board state as deltas between turns | Cheaper per-turn API cost | Errors compound; model diverges after 10+ turns | Never for the canonical board model; a debug diff view is acceptable |
-| Call vision API synchronously in a discord.py handler | Simpler code path | Blocks event loop; bot stops responding; Discord heartbeat fails | Never — always use `asyncio.to_thread()` or `run_in_executor()` |
-| Use Playwright sync API in a thread alongside discord.py | Avoids async complexity | Thread-safety issues, event loop conflicts, unpredictable crashes | Prototype only; refactor before any real use |
-| Use `time.sleep()` in any discord.py coroutine | Easy to write | Blocks event loop; bot goes dark during sleep | Never — use `asyncio.sleep()` |
-| Skip `interaction.response.defer()` for "fast" commands | Simpler code | Commands that take >3s will timeout and show users an error | Never — always defer if the handler does any async I/O |
-| Send raw full-page screenshots to Claude Vision API | No preprocessing step | Tiny tile size degrades accuracy; inflates token cost; may exceed 5 MB limit | Never — always crop to board region and upscale before sending |
-| Store bot token or API key in `.env` committed to the repo | Convenient | Token exposure leads to bot compromise and API billing abuse | Never |
+| Hardcode iframe selector as `'iframe:nth-child(1)'` | Fast to write | Breaks whenever Discord adds or reorders iframes in the DOM | Never — inspect and use src-pattern selector |
+| Cache `Frame` object across turns | Fewer re-lookups per turn | `FrameDetachedError` whenever Discord reloads the Activity iframe | Never — re-derive from `frame_locator()` each turn |
+| Hardcode 27x19 board dimensions in coordinate math | Simplifies tile math | Breaks on any board expansion; game is designed to grow | Never — detect dimensions from vision output each turn |
+| Accumulate board state as deltas between turns | Cheaper per-turn API cost | Errors compound; model diverges after 10+ turns | Never for canonical board model; delta view for debugging only |
+| Use `time.sleep()` inside discord.py coroutines | Easy to write | Blocks event loop; bot goes dark; Discord heartbeat may fail | Never — use `asyncio.sleep()` |
+| Launch new Playwright browser per game turn | Avoids lifecycle management code | 3-5 second startup overhead per turn; browser process leaks over time | Never — launch once at bot startup; keep context alive |
+| Use fixed sleep delays for canvas rendering | Simple wait implementation | Too short = blank canvas; too long = unnecessary latency every turn | Prototype only — replace with condition-based wait before shipping |
+| Store Discord session userDataDir inside the source repo | Convenient for deployment | Live session tokens in source control; exposure leads to account theft | Never — keep userDataDir outside the repo; add to `.gitignore` |
 
 ---
 
@@ -231,16 +278,15 @@ Common mistakes when connecting to external services.
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| Discord API (discord.py) | Responding to interaction after 3-second window without deferring | Call `await interaction.response.defer()` as the first line in any handler that does async work |
-| Discord API | Using `interaction.response.send_message()` after already calling `defer()` | After `defer()`, use `interaction.followup.send()` exclusively; mixing the two raises `InteractionResponded` |
-| Claude Vision API | Sending full 1920x1080 Discord screenshot | Crop to board region; individual tiles at full resolution may be under the 200px minimum; upscale the crop to keep tiles legible |
-| Claude Vision API | Image over 5 MB rejected silently or with a 400 error | Validate image file size before sending; Discord Nitro attachments can reach 100 MB; compress/resize before API call |
-| Claude Vision API | Expecting free-text JSON in the response | Use structured output / tool-use schema to guarantee valid JSON that matches your `BoardState` schema; plain text requests produce inconsistent format |
-| Playwright (canvas) | Taking screenshot immediately after page load | Wait for a game-specific render signal; `waitForLoadState("networkidle")` alone is insufficient for canvas apps that render after initial load |
-| Playwright (iframe) | Using `page.locator()` for game elements | Use `page.frame_locator('[src*="letter-league"]').locator(...)` to scope to the correct frame; main page locators find nothing inside the iframe |
-| Playwright (canvas clicks) | Using viewport coordinates for tile clicks | All tile position offsets must be relative to the canvas element's bounding box, not the viewport origin |
-| Existing word engine | Calling synchronous engine functions directly in async handlers | Wrap with `await asyncio.to_thread(engine_fn, *args)` to prevent event loop blocking |
-| Wordnik wordlist | Assuming 100% overlap with Letter League's accepted words | Letter League may use a proprietary dictionary; Wordnik is an approximation; label suggestions "likely valid" and verify with a known-valid test word set |
+| Playwright + discord.py | Using `sync_playwright` in any discord.py coroutine | Use `async_playwright` exclusively; every Playwright call must be `async def` |
+| Playwright canvas | Screenshot immediately after page load | Wait for a game-specific canvas-ready signal; use `canvas.toDataURL()` injection as primary fallback |
+| Discord Activity iframe | `page.locator()` for game elements | `page.frame_locator('[src*="discordsays.com"]').locator(...)` to scope to the correct frame |
+| Discord Activity iframe | Guessing iframe selector without inspection | Run a headed inspection spike with DevTools before writing any selector; document confirmed selector |
+| Canvas tile clicks | `page.mouse.click(viewport_x, viewport_y)` with grid-only math | `canvas_element.click(position={"x": offset_x, "y": offset_y})` where offsets are bounding-box-relative |
+| Discord session | `storageState` JSON for persistent login | `launch_persistent_context(user_data_dir=...)` for full profile persistence; validate session at startup |
+| Discord login | Re-running login flow from Playwright each restart | Do manual first-login once; save `userDataDir`; reuse on all subsequent runs |
+| Autonomous play loop | Polling screenshots at fixed 500ms interval | Use condition-based waiting; rapid polling creates detectable usage patterns and wastes Claude Vision API quota |
+| Existing word engine | Calling synchronous engine directly in async handler | `await asyncio.to_thread(engine_fn, *args)` to prevent event loop blocking |
 
 ---
 
@@ -250,11 +296,11 @@ Patterns that work at small scale but fail as usage grows.
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| Calling synchronous word engine in async handler without executor | Bot freezes during move generation; other commands queue up | Wrap with `asyncio.to_thread()` or `run_in_executor(None, ...)` | Every turn; GADDAG on complex board takes 1-5 seconds |
-| Sending full Discord screenshot to vision API (no crop) | High token cost ($4-5/image at 1080p), slow response, worse tile accuracy | Crop to board region before sending; target board crop under 1.15 megapixels | From first production use; cost visible immediately on API billing |
-| Re-launching Playwright browser per game turn | 3-5 second startup overhead per turn; browser process leak under concurrent games | Launch one browser at bot startup; keep context alive; only restart on crash | Every turn in autonomous mode |
-| Caching iframe frame reference across Discord reconnects | `FrameNotFound` errors after Discord reinitializes the Activity iframe | Re-acquire the frame_locator reference each turn rather than caching it between sessions | Any time the user disconnects/reconnects from the voice channel |
-| Hardcoded sleep delays for canvas rendering | Slow when delay is too long; blank canvas when too short | Use condition-based waits (`waitForFunction`, polling a game-state indicator) instead of fixed timeouts | Varies by network speed and server load |
+| Re-launching Playwright browser per turn | 3-5 second startup overhead per turn; browser process accumulation | Launch once at bot startup; keep context alive; restart only on unrecoverable crash | Every turn in autonomous mode |
+| Full Discord screenshot to Claude Vision without crop | High token cost ($4-5 per 1080p image); 10-20 second latency; worse tile accuracy | Crop to board region before sending; target under 1.15 megapixels | From first production use |
+| Polling screenshots at high frequency for turn detection | Saturates Claude Vision API quota; `OverloadedError` from Anthropic | Detect turn via DOM state change or coarse visual diff at low frequency; call Claude Vision only when turn is confirmed | After ~20 games per day |
+| Fixed-sleep wait for canvas rendering | Either too slow (extra latency every turn) or too fast (blank canvas on slow servers) | Condition-based wait: `wait_for_function` polling canvas non-blank + explicit ready indicator | Varies by server load; high-load servers expose this immediately |
+| Caching iframe `Frame` reference across sessions | `FrameDetachedError` mid-game after any Discord reconnect | Re-acquire `frame_locator` reference at start of each action sequence | Any voice channel reconnect or Discord client soft-navigation |
 
 ---
 
@@ -264,11 +310,11 @@ Domain-specific security issues beyond general web security.
 
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Storing Discord bot token or Anthropic API key in committed code or `.env` | Token theft enables full bot impersonation; API key misuse generates unexpected billing | Use OS environment variables; add `.env` to `.gitignore`; rotate immediately if exposed |
-| Logging full Discord client screenshots to disk | Other users' private messages may be visible in the background of Discord screenshots | Log only the cropped board region; never log full Discord client captures |
-| Using a personal Discord account for Playwright-driven autonomous mode | Permanent personal account ban if Discord detects self-bot activity | Use a dedicated throwaway account; document this requirement in setup guide; never reuse personal accounts |
-| No file type or size validation on screenshot uploads in advisor mode | Malformed or oversized images crash the vision pipeline; adversarial images may trigger unexpected LLM behavior | Validate `attachment.content_type in {"image/png", "image/jpeg", "image/webp"}` and `attachment.size <= 10_000_000` before processing |
-| Exposing Anthropic API key in Discord response messages or logs | Key is visible to all channel members; billing abuse risk | Never include API keys in any message, embed, or log line; use structured logging that redacts credential fields |
+| Storing Discord session `userDataDir` inside the source repo or committed to git | Live Discord tokens exposed; account takeover | Keep `userDataDir` path outside repo root; add to `.gitignore`; treat like a credentials file |
+| Using a personal Discord account for Playwright-driven autonomous mode | Permanent personal account ban if Discord detects self-bot | Use a dedicated throwaway account; never reuse personal accounts for automation |
+| Logging full Discord client screenshots to disk | Other users' private messages visible in screenshot background | Log only the cropped board region; never persist full Discord client captures |
+| Exposing Anthropic API key in Discord response messages or logs | Key visible to channel members; billing abuse | Never include API keys in embeds, messages, or log lines; use structured logging with credential redaction |
+| No file type or size validation on screenshot uploads in advisor mode | Malformed or oversized images crash vision pipeline; adversarial images trigger unexpected LLM behavior | Validate `attachment.content_type` and `attachment.size <= 10_000_000` before processing |
 
 ---
 
@@ -278,11 +324,11 @@ Common user experience mistakes in this domain.
 
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Bot suggests a word that Wordnik considers valid but Letter League rejects | User plays the word, it's rejected, turn is wasted, trust in bot is destroyed | Label suggestions "likely valid (Wordnik)" and include a disclaimer that Letter League's dictionary may differ |
-| Advisor mode takes 10-15 seconds with no intermediate feedback | User thinks the bot is broken or the command failed | Always `defer()` immediately; optionally send a follow-up "thinking" message; edit with results when ready |
-| No visual confirmation of what the bot read from the board | User can't verify the vision parsing was correct before following advice | Include a text-based board representation in the response alongside the word suggestion; users can spot misreads at a glance |
-| Bot responds with an optimal move at maximum difficulty with no explanation | New players can't learn from suggestions they can't follow | Include the score breakdown and placement explanation in every response, not just the final word |
-| Difficulty percentage produces no visible difference between 30% and 70% settings | Users cannot find a difficulty level they enjoy; feature feels non-functional | Test that 0%, 50%, and 100% produce statistically different average scores across many simulated boards before shipping |
+| Autonomous mode plays too fast (sub-second between tiles) | Looks robotic; increases detection risk; may trigger Discord rate limiting | Enforce 1-3 second delays between tile placements; vary timing slightly |
+| No status feedback while autonomous mode is playing | Users watching don't know if the bot is thinking, stuck, or broken | Post Discord status messages at turn start ("Bot is playing...") and turn end ("Bot played WORD for N points") |
+| Bot passes or skips a turn with no explanation | Users see the bot do nothing; assume it crashed | Log the reason for passing (no valid moves found, vision failure, game state uncertain) as a Discord message |
+| Advisor mode takes 10-15 seconds with no intermediate feedback | User thinks command failed | Always `defer()` immediately; send a "thinking" indicator; edit with results when ready |
+| Difficulty percentage produces no visible effect between 30% and 70% | Feature feels non-functional | Verify statistically different average scores across 0%, 50%, 100% on many simulated boards before shipping |
 
 ---
 
@@ -290,15 +336,16 @@ Common user experience mistakes in this domain.
 
 Things that appear complete but are missing critical pieces.
 
-- [ ] **Canvas screenshot capture:** Works in headed mode — verify it also works in headless mode; canvas rendering issues are headless-specific and the deployment environment is almost certainly headless
-- [ ] **Vision pipeline:** Returns valid JSON — verify the JSON represents the actual board, not a hallucinated one; run against 5+ ground-truth screenshots and compare expected vs. returned tile layout
-- [ ] **Multiplier square detection:** Board letter tiles are extracted — verify that DL/TL/DW/TW multiplier squares are also detected and stored in BoardState; the existing engine uses these for scoring
-- [ ] **Discord interaction handler:** Command accepts screenshot attachment — verify it also handles: no attachment (user forgets to upload), wrong file type (PDF, GIF), file over 5 MB, and network failure on attachment download
-- [ ] **Interaction deferral:** Handler works in dev — verify it defers before any async work; test with an artificially slow vision mock to confirm no 3-second timeout occurs
-- [ ] **Event loop blocking:** Word engine produces results — verify calling it from a discord.py handler does not block other commands; test by sending two `/analyze` commands near-simultaneously
-- [ ] **Playwright iframe access:** Can navigate to Discord — verify `frame_locator()` successfully scopes into the Letter League iframe in headless mode with the correct selector
-- [ ] **Autonomous mode account:** Can log in — verify the dedicated automation account has Letter League accessible and can join a voice channel; test CAPTCHA handling and 2FA if the account uses it
-- [ ] **BoardState contract:** Vision pipeline produces output — verify that the `BoardState` dataclass produced by the vision pipeline is accepted without modification by the existing v1.0 word engine; field names, types, and coordinate systems must match exactly
+- [ ] **Canvas screenshot:** Works in headed mode — verify it also works in headless/Xvfb mode with the `--disable-blink-features=AutomationControlled` + `--use-gl=egl` flags; headed dev environment does not guarantee headless production success
+- [ ] **iframe access:** `frame_locator()` returns a locator — verify it actually scopes to the Letter League canvas; confirm with `await frame_locator.locator('canvas').count() > 0` on a live game
+- [ ] **Session persistence:** Persistent context launches successfully — verify login state is still valid (page URL is not `discord.com/login`) before any game navigation is attempted
+- [ ] **Canvas coordinate mapping:** Click code sends coordinates — verify by clicking the center of a known visible tile and confirming the game highlights/selects that tile (not an adjacent one)
+- [ ] **Turn detection:** Polling loop fires — verify it fires exactly once per turn and does not fire during opponent turns; test across at least one complete 2-player game
+- [ ] **Tile placement sequence:** Individual tile clicks succeed — verify the complete sequence (select rack tile → select board cell → confirm placement) as an atomic action before building multi-tile word placement
+- [ ] **Word confirmation:** Tiles placed on board — verify the confirmation button click is correctly targeted and the game registers the move (not silently ignored)
+- [ ] **iframe re-acquisition:** Bot completes one turn — verify it also completes a second turn after a manual Discord Activity reconnect without a restart
+- [ ] **Board state freshness:** Vision output returns valid JSON — verify each turn starts from a fresh screenshot, not a cached result from the previous turn
+- [ ] **TOS account separation:** Bot is running — verify the Playwright session uses a different Discord account than the discord.py bot token; they must be separate accounts
 
 ---
 
@@ -308,13 +355,14 @@ When pitfalls occur despite prevention, how to recover.
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Playwright sync API conflict discovered mid-integration | MEDIUM | Audit entire codebase for `sync_playwright` imports; replace with `async_playwright` + async wrapper; re-test all Playwright code paths |
-| Canvas screenshot blank in headless mode | MEDIUM | Switch to JavaScript `canvas.toDataURL()` extraction as primary method; rebuild screenshot pipeline around this approach; benchmark latency difference |
-| Vision LLM returns structurally valid but wrong board | LOW per-instance | Retry with preprocessed crop; if retries fail, return error to user with "board reading failed, try a clearer screenshot"; log the failed image for offline analysis |
-| Board state drift detected mid-autonomous game | LOW | Discard internal model entirely; force a full re-read from fresh screenshot; if consistency check still fails, pass the turn and try again next round |
-| Discord automation account banned | HIGH | Create a new account; review timing of automated clicks and add longer delays; accept that indefinite operation of autonomous mode is inherently at risk; re-evaluate whether autonomous mode scope is worth ongoing account creation overhead |
-| Interaction timeout (`application did not respond`) | LOW | Add `await interaction.response.defer()` as first line of handler; deploy fix; no data loss |
-| iframe `FrameNotFound` error in autonomous mode | LOW | Re-acquire frame reference on each turn rather than caching; add retry logic that re-navigates to the Activity if the frame disappears |
+| Playwright sync API conflict mid-integration | MEDIUM | Audit entire codebase for `sync_playwright` imports; replace with `async_playwright` + async wrappers; re-test all Playwright code paths |
+| Canvas screenshot blank in headless | MEDIUM | Switch to `canvas.toDataURL()` injection via `frame.evaluate()` as the primary capture method; benchmark latency vs. screenshot; rebuild capture pipeline around this approach |
+| iframe selector no longer valid after Discord update | LOW | Re-run headed DevTools inspection spike; update selector constant; redeploy |
+| Discord session expired at startup | LOW | Bot detects login redirect; triggers re-authentication routine; logs "session expired, re-authenticating" |
+| Discord automation account banned | HIGH | Create new account; review click timing patterns (add longer delays); accept that autonomous mode has inherent account ban risk; document for users |
+| `FrameDetachedError` mid-game | LOW | Add retry-with-reacquisition to iframe action layer; re-acquire frame from `page.frame_locator()`; retry action once |
+| Turn detection signal changes after Discord update | MEDIUM | Re-run live game observation spike; update detection logic; test across 2 full games before re-deploying |
+| Board state drift causing wrong moves | LOW | Discard internal model; force full re-read from fresh screenshot; if consistency check still fails, pass the turn and retry next round |
 
 ---
 
@@ -324,36 +372,37 @@ How roadmap phases should address these pitfalls.
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| Playwright sync API conflict | Browser automation foundation | Integration test: discord.py command triggers Playwright; bot stays responsive during execution |
-| Canvas screenshot blank in headless mode | Browser automation foundation | Screenshot test: capture Letter League canvas headless and headed; compare pixel content; must be non-blank in headless |
-| Vision LLM hallucination on tiles | Vision pipeline phase | Accuracy test: 20+ ground-truth screenshots; measure per-tile error rate; must be <2% before connecting to engine |
-| Interaction token timeout | Discord advisor integration | Stress test: simulate slow vision API (4-15 sec mock); verify no timeout errors and correct deferred response |
-| Word engine blocking event loop | Discord advisor integration | Concurrency test: send two `/analyze` commands near-simultaneously; verify both complete without blocking each other |
-| Board state drift in autonomous mode | Vision pipeline + autonomous mode | Consistency test: re-read same board 5 times; verify identical output; simulate 20-turn sequence; check drift rate |
-| Self-bot TOS risk | Autonomous mode design (pre-implementation) | Documentation review: setup guide explicitly names TOS risk and requires dedicated account |
-| iframe cross-origin blocking | Browser automation foundation | Smoke test: `frame_locator()` locates at least one static game element before any game logic is built |
-| BoardState contract mismatch | Discord advisor integration | Integration test: end-to-end path from real screenshot through vision pipeline through word engine; verify no type errors or key mismatches |
-| Image size/type validation | Discord advisor integration | Edge-case test: send PDF, 50 MB image, GIF; verify graceful rejection with user-facing error message |
+| Playwright sync API conflict | Browser automation foundation | Integration test: discord.py slash command triggers Playwright navigate + screenshot; bot stays responsive to concurrent commands |
+| Canvas screenshot blank in headless | Browser automation foundation (spike) | Capture test: take Letter League canvas screenshot in headed and headless modes; pixel content must be non-blank in both; or confirm `toDataURL()` method works |
+| iframe selector undocumented | Browser automation foundation (pre-code spike) | DevTools inspection deliverable: document confirmed selector string + screenshot of DOM; `frame_locator(selector).locator('canvas').count() >= 1` on live game |
+| Canvas coordinate mapping | Browser automation foundation | Click validation: click center of 5 known tile positions; game highlights correct tile in each case |
+| Session token expiry | Browser automation foundation | Startup validation test: bot correctly detects expired session; gracefully re-authenticates or reports actionable error |
+| Headed browser detection | Browser automation foundation | Login test: automated login completes without CAPTCHA or verification prompt using `--disable-blink-features=AutomationControlled` |
+| iframe frame reference stale | Browser automation foundation | Reconnect test: simulate Activity reload mid-session; bot re-acquires frame and completes next action without crash |
+| Turn detection on unverified signal | Autonomous play (spike first) | Live observation: identify confirmed DOM/visual turn signal across 2 full games before writing detection code |
+| Board state drift | Autonomous play | Consistency test: re-read same board 5 times; verify identical output; simulate 20-turn sequence; measure drift rate |
+| Self-bot TOS risk | Autonomous play design (pre-implementation) | Documentation review: setup guide explicitly names TOS risk; dedicated account requirement documented and enforced in configuration |
+| TOS account separation | Browser automation foundation | Configuration test: assert Playwright session account != discord.py bot token account at startup |
 
 ---
 
 ## Sources
 
-- [Discord Automated User Accounts (Self-Bots) official policy](https://support.discord.com/hc/en-us/articles/115002192352-Automated-User-Accounts-Self-Bots) — explicit prohibition on selfbots; permanent ban consequence confirmed
-- [Discord Platform Manipulation Policy](https://discord.com/safety/platform-manipulation-policy-explainer) — enforcement approach and account ban history (2021-2023 intensification)
-- [discord.py FAQ — Blocking vs. Non-Blocking](https://discordpy.readthedocs.io/en/stable/faq.html) — event loop blocking patterns; `asyncio.sleep` vs. `time.sleep`; `run_in_executor` recommendation
-- [Playwright GitHub issue #19225 — canvas elements don't show up in screenshots](https://github.com/microsoft/playwright/issues/19225) — documented canvas screenshot bug; resolution is timing/wait strategy, not a Playwright code fix
-- [Playwright GitHub issue #33566 — Changes in Chromium headless in Playwright v1.49](https://github.com/microsoft/playwright/issues/33566) — new headless implementation (November 2024); may affect canvas timing behavior
-- [Playwright iframe handling — TestMu AI guide](https://www.testmuai.com/learning-hub/handling-iframes-in-playwright/) — `frame_locator()` vs. legacy `Frame` approach; cross-origin iframe patterns
-- [Playwright canvas automation — Medium guide](https://smrutisouravsahoo06.medium.com/the-secret-to-automating-canvas-elements-playwright-js-revealed-c2249e522083) — coordinate-based canvas clicking; `getBoundingClientRect()` for position calculation
-- [Claude Vision API official docs](https://platform.claude.com/docs/en/build-with-claude/vision) — 5 MB per-image limit; 200px minimum for quality; structured output for reliable JSON extraction; images below 200px degrade quality
-- [Claude Vision limitations — official docs](https://platform.claude.com/docs/en/build-with-claude/vision#limitations) — limited spatial reasoning; imprecise counting; reduced accuracy on small or stylized text
-- [Claude Structured Outputs — official docs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) — schema-guaranteed JSON responses; tool-use approach vs. prompt-only JSON extraction
-- [discord.py Rate Limits — issue #9418](https://github.com/Rapptz/discord.py/issues/9418) — rate limit occasionally produces errors instead of auto-retry warnings
-- [Blocking vs Non-Blocking IO — Discord Bot Tutorial](https://tutorial.vcokltfre.dev/tips/blocking/) — event loop freezing mechanics; heartbeat blocking consequences; `run_in_executor` pattern
-- [Letter League Discord FAQ](https://support-apps.discord.com/hc/en-us/articles/26502196674583-Letter-League-FAQ) — 27x19 expandable board; up to 8 players per game
-- [Wordbot reference implementation](https://github.com/vike256/Wordbot) — CLI word lookup only; no board reading or automation; confirms no prior art for this project's full scope
+- [Discord Automated User Accounts (Self-Bots) official policy](https://support.discord.com/hc/en-us/articles/115002192352-Automated-User-Accounts-Self-Bots) — explicit prohibition on selfbots; permanent ban consequence confirmed (HIGH confidence)
+- [Discord Platform Manipulation Policy](https://discord.com/safety/platform-manipulation-policy-explainer) — enforcement approach and ban history (HIGH confidence)
+- [Discord Activities — How Activities Work](https://docs.discord.com/developers/activities/how-activities-work) — Activities run in `*.discordsays.com` iframe; postMessage communication; exact selector undocumented (MEDIUM confidence — iframe src pattern inferred from developer docs, not confirmed by live inspection)
+- [Playwright GitHub issue #19225 — canvas elements don't show up in screenshots](https://github.com/microsoft/playwright/issues/19225) — canvas screenshot blank root cause and resolution strategy (HIGH confidence)
+- [Playwright GitHub issue #33566 — Changes in Chromium headless in v1.49](https://github.com/microsoft/playwright/issues/33566) — new headless implementation changes timing behavior; November 2024 (HIGH confidence)
+- [Playwright GitHub issue #3170 — cross-origin iframe coordinate offset bug](https://github.com/microsoft/playwright/issues/3170) — element positions inside cross-origin iframes may not account for iframe offset (MEDIUM confidence)
+- [Playwright GitHub issue #2753 — closing last page in persistent context closes context unexpectedly](https://github.com/microsoft/playwright/issues/2753) — persistent context edge case behavior (MEDIUM confidence)
+- [Playwright Python issue #462 / #2053 / #2705 — sync API inside asyncio loop](https://github.com/microsoft/playwright-python/issues/462) — documented as the most frequent Python Playwright integration mistake (HIGH confidence)
+- [Playwright Python auth docs](https://playwright.dev/python/docs/auth) — `storageState` does not persist session storage; `launch_persistent_context` for full disk profile persistence (HIGH confidence)
+- [Playwright Mouse API docs](https://playwright.dev/docs/api/class-mouse) — operates in main-frame CSS pixels relative to viewport top-left; coordinate implications for iframe-contained canvas (HIGH confidence)
+- [createIT — Testing WebGL with Playwright headless](https://www.createit.com/blog/headless-chrome-testing-webgl-using-playwright/) — `--use-angle=gl` / `--use-gl=egl` for headless GPU acceleration; Xvfb for headed virtual display (MEDIUM confidence)
+- [discord.py FAQ](https://discordpy.readthedocs.io/en/stable/faq.html) — event loop blocking; `asyncio.sleep` vs. `time.sleep`; `run_in_executor` recommendation (HIGH confidence)
+- [Playwright storageState — BrowserStack guide](https://www.browserstack.com/guide/playwright-storage-state) — token expiry causes silent test failures; must plan for re-authentication (MEDIUM confidence)
+- [Castle.io — Anti-detect frameworks evolution](https://blog.castle.io/from-puppeteer-stealth-to-nodriver-how-anti-detect-frameworks-evolved-to-evade-bot-detection/) — `navigator.webdriver` detection by anti-bot systems; `--disable-blink-features=AutomationControlled` as mitigation (MEDIUM confidence)
 
 ---
-*Pitfalls research for: Letter League Bot v1.1 — vision + Discord bot + browser automation additions*
+*Pitfalls research for: Letter League Bot v1.2 — Playwright browser automation + autonomous play addition*
 *Researched: 2026-03-24*

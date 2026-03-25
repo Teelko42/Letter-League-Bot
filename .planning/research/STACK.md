@@ -1,192 +1,243 @@
 # Stack Research
 
 **Domain:** Discord bot with AI vision, browser automation, and word-game AI
-**Researched:** 2026-03-24 (updated for v1.1 milestone)
-**Confidence:** HIGH (all versions re-verified against PyPI and official docs March 2026)
+**Researched:** 2026-03-24 (v1.2 update — Browser Automation + Autonomous Play)
+**Confidence:** HIGH (all new additions verified against PyPI, official Playwright docs, and official sources March 2026)
 
 ---
 
-## v1.0 vs v1.1 Scope Separation
+## Scope: What This Document Covers
 
-The v1.0 engine is shipped and validated. Do not re-implement or replace:
-
-| Already Exists (v1.0) | Do NOT Re-research |
-|-----------------------|--------------------|
-| Python 3.11 | Runtime |
-| pytest + pytest-asyncio | Test framework |
-| wordfreq | Word frequency for difficulty |
-| GADDAG dictionary engine | Move generation |
-| Board state (27x19 grid) | Data model |
-| Classic/Wild scoring engine | Scoring |
-| DifficultyEngine | Alpha-weighted selection |
-
-**v1.1 adds three new capability areas:**
-1. Claude Vision API — read board state from screenshots
-2. discord.py bot — advisor mode, message/attachment handling
-3. Playwright — autonomous mode browser automation
+This file covers the FULL stack for the project. The v1.2 section at the top documents only the NEW additions needed for browser automation. The v1.1 section below it remains the authoritative record for what is already shipped.
 
 ---
 
-## Recommended Stack
+## v1.2 NEW Additions: Browser Automation Stack
 
-### Core Technologies
+These are the only additions needed for the autonomous play milestone. Everything from v1.0 and v1.1 continues unchanged.
+
+### Core Technologies (NEW in v1.2)
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| `discord.py` | `2.7.1` | Discord bot framework — message handling, attachment reads, slash/hybrid commands | Project constraint specifies discord.py. Actively maintained; 5,400+ commits; v2.x supports native app_commands (slash commands) and full asyncio integration. Released March 3, 2026. The only maintained first-party Python Discord library. |
-| `anthropic` | `0.86.0` | Claude Vision API client — send board screenshots, receive structured JSON | Official Anthropic SDK. Provides sync and async clients, type safety, automatic retries, and rate-limit handling. Python >=3.9. Released March 18, 2026. |
-| `playwright` | `1.58.0` | Chromium browser automation — open Discord Activity iframe, take screenshots, click game elements | Better than Selenium for modern SPAs: auto-wait semantics, native iframe locator support, first-class async Python API required by discord.py's asyncio event loop. Released January 30, 2026. Python >=3.9. |
+| `playwright` | `1.58.0` | Chromium browser automation — open Discord web client, navigate to voice channel, interact with Letter League Activity iframe, click canvas tiles | Already specified in project constraints. Async Python API integrates natively with discord.py's asyncio event loop. Auto-wait semantics eliminate manual `time.sleep()` calls. Native `frame_locator()` API handles Discord's nested iframe structure. Required `async_playwright` (not sync) inside discord.py's loop. Released 2026-01-30. Python >=3.9. |
+| `patchright` | `1.58.2` | Drop-in Playwright replacement with CDP leak patches — reduces Discord headless detection risk | Discord uses bot detection similar to Cloudflare/DataDome targets. Patchright patches runtime CDP leaks, sets `navigator.webdriver = false`, and avoids HeadlessChrome UA string exposure. Drop-in swap: change `from playwright.async_api import async_playwright` to `from patchright.async_api import async_playwright`. Chromium-only (matches project requirement). Version 1.58.2, released 2026-03-07. LOW overhead for HIGH detection-bypass benefit. |
 
-### Claude Model Selection
+**Decision on patchright vs vanilla playwright:** Use `patchright` as the Playwright backend. It is a drop-in replacement with one import change. The project requires headed Chromium (PROJECT.md: "Discord detects headless Chromium; use headed with virtual display"), so headless mode is already off — but CDP-level fingerprint leaks persist even in headed mode. Patchright closes those leaks. If patchright introduces any compatibility issues, revert to `playwright` with one line change.
+
+### Supporting Libraries (NEW in v1.2)
+
+| Library | Version | Purpose | When to Use |
+|---------|---------|---------|-------------|
+| `numpy` | `>=1.24` | Convert `page.screenshot()` bytes to ndarray for OpenCV processing — already an implicit dependency of opencv-python | Use when comparing sequential canvas screenshots to detect visual state changes (turn detection). `np.frombuffer(screenshot_bytes, dtype=np.uint8)` then `cv2.imdecode()`. No install needed if opencv-python is present — numpy is already a transitive dependency. |
+
+**Why numpy is listed separately:** It is NOT a new install, but the explicit byte-to-ndarray conversion pattern is new code. Documenting the dependency chain avoids confusion.
+
+**Nothing else needs adding.** The remaining v1.2 features (screenshot capture, canvas analysis, Vision API calls, move generation, difficulty selection) all use the existing stack from v1.1.
+
+---
+
+## v1.2 Integration Patterns
+
+### Pattern 1: Persistent Browser Session
+
+The Playwright browser must live for the duration of a game session (potentially 20–60 minutes). Do NOT use the `async with async_playwright() as p:` auto-close pattern inside discord.py — that closes the browser when the context manager exits.
+
+**Correct pattern — bot-level browser lifecycle:**
+```python
+# In bot.py setup_hook: launch once, store on bot instance
+from patchright.async_api import async_playwright
+
+class LetterLeagueBot(commands.Bot):
+    async def setup_hook(self) -> None:
+        # ... existing GADDAG/DifficultyEngine setup ...
+        self._pw = await async_playwright().start()  # does NOT auto-close
+        self.browser = await self._pw.chromium.launch_persistent_context(
+            user_data_dir="cache/browser_profile",
+            headless=False,  # Discord rejects headless Chromium fingerprint
+            channel="chrome",  # use system Chrome if available; else bundled Chromium
+        )
+
+    async def close(self) -> None:
+        await self.browser.close()
+        await self._pw.stop()
+        await super().close()
+```
+
+**Why `launch_persistent_context` over `storage_state`:**
+- `launch_persistent_context(user_data_dir=...)` saves cookies, localStorage, IndexedDB, and cached JS/CSS across restarts — Discord uses all of these for session state
+- `storage_state` only captures cookies/localStorage; does NOT preserve Chrome-level session caches, meaning Discord may prompt re-authentication on every bot restart
+- Only one process can own the `user_data_dir` at a time — this is fine since the bot runs as a single process
+- Source: [Playwright BrowserType docs](https://playwright.dev/python/docs/api/class-browsertype) — confirms `user_data_dir` semantics
+
+**Directory:** `cache/browser_profile/` — add to `.gitignore`, never commit (contains Discord session tokens).
+
+### Pattern 2: Discord Web Client Navigation
+
+Navigate via the standard web URL format. No deep-link protocol or Discord API needed.
+
+```python
+# Navigate to voice channel (guild and channel IDs from discord.py event context)
+channel_url = f"https://discord.com/channels/{guild_id}/{channel_id}"
+page = self.browser.pages[0] if self.browser.pages else await self.browser.new_page()
+await page.goto(channel_url, wait_until="networkidle")
+```
+
+URL format: `https://discord.com/channels/{guild_id}/{channel_id}` — confirmed standard web client format.
+
+### Pattern 3: Activity iframe Interaction
+
+Discord Activities run inside a nested iframe. Use `frame_locator()` to address elements inside it.
+
+```python
+# Letter League Activity iframe (selector TBD — inspect Discord DOM to confirm)
+activity_frame = page.frame_locator('iframe[src*="activities"]').first
+
+# Take screenshot of the iframe content region
+iframe_element = page.locator('iframe[src*="activities"]').first
+bounding_box = await iframe_element.bounding_box()
+screenshot_bytes = await page.screenshot(clip={
+    "x": bounding_box["x"],
+    "y": bounding_box["y"],
+    "width": bounding_box["width"],
+    "height": bounding_box["height"],
+})
+```
+
+Note: The exact iframe selector requires DOM inspection of a live Discord session during implementation. The `src*="activities"` pattern is a starting point — confirm during Phase development.
+
+### Pattern 4: Canvas Screenshot Capture (Blank Detection)
+
+The canvas is blank while the game loads. Detect non-blank canvas before passing to the vision pipeline.
+
+```python
+import numpy as np
+import cv2
+
+async def is_canvas_loaded(page, iframe_clip: dict) -> bool:
+    """Return True if canvas has rendered non-trivial content."""
+    screenshot_bytes = await page.screenshot(clip=iframe_clip)
+    arr = cv2.imdecode(np.frombuffer(screenshot_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
+    # If more than 95% of pixels share the same dominant color, canvas is blank/loading
+    dominant = np.bincount(arr.reshape(-1, 3).dot([1, 256, 65536])).argmax()
+    dominant_count = (arr.reshape(-1, 3).dot([1, 256, 65536]) == dominant).sum()
+    fill_ratio = dominant_count / arr.size * 3
+    return fill_ratio < 0.95
+```
+
+Alternative: use `page.evaluate()` to read canvas pixel data directly via JavaScript:
+```python
+is_blank = await page.evaluate("""() => {
+    const canvas = document.querySelector('canvas');
+    if (!canvas) return true;
+    const ctx = canvas.getContext('2d');
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const first = data[0];
+    return data.every((v, i) => i % 4 === 3 || v === first);  // all same color = blank
+}""")
+```
+
+The screenshot approach is preferred because: (1) canvas `getContext('2d')` may be blocked by the iframe's cross-origin policy when Discord Activity iframes are served from a different origin; (2) screenshot bytes are already needed for the vision pipeline, so capturing once serves dual purpose.
+
+### Pattern 5: Turn Detection
+
+No DOM API exposes turn state. Use visual polling with screenshot comparison.
+
+```python
+import asyncio
+
+async def wait_for_turn(page, clip: dict, poll_interval: float = 2.0, timeout: float = 300.0):
+    """Poll until visual state changes, indicating a new turn."""
+    last_screenshot = await page.screenshot(clip=clip)
+    elapsed = 0.0
+    while elapsed < timeout:
+        await asyncio.sleep(poll_interval)
+        current = await page.screenshot(clip=clip)
+        if current != last_screenshot:
+            return current  # visual change detected — new game state
+        elapsed += poll_interval
+    raise TimeoutError("Turn wait exceeded timeout")
+```
+
+More precise alternative: compare only the rack region (bottom of canvas) rather than full board, to detect tile distribution (turn start) vs board change (opponent play). The exact rack bounding box requires calibration against live screenshots.
+
+### Pattern 6: Tile Placement Clicks
+
+Canvas tiles have no DOM elements. Use `page.mouse.click()` at absolute page coordinates.
+
+```python
+# Get canvas element position
+canvas_element = activity_frame.locator("canvas").first
+canvas_box = await canvas_element.bounding_box()  # relative to main page
+
+# Click at computed tile coordinates (canvas_box offsets + tile grid math)
+tile_x = canvas_box["x"] + computed_col_offset
+tile_y = canvas_box["y"] + computed_row_offset
+await page.mouse.click(tile_x, tile_y)
+
+# Small delay between clicks — Discord Activity canvas may buffer rapid events
+await asyncio.sleep(0.1)
+```
+
+Note: `locator.click(position={"x": col_offset, "y": row_offset})` is an equivalent alternative that keeps coordinates relative to the element, avoiding the need to add `canvas_box["x"]` manually.
+
+---
+
+## v1.1 Stack (Shipped — Do NOT Re-research)
+
+### Core Technologies (Shipped in v1.1)
+
+| Technology | Version | Purpose | Why Recommended |
+|------------|---------|---------|-----------------|
+| `discord.py` | `2.7.1` | Discord bot framework — message handling, attachment reads, slash commands, event loop | Project constraint. Actively maintained. v2.x supports native `app_commands` (slash commands) and full asyncio integration. Released 2026-03-03. Only maintained first-party Python Discord library. |
+| `anthropic` | `0.86.0` | Claude Vision API client — send board screenshots, receive structured JSON | Official Anthropic SDK. `AsyncAnthropic` client required (sync client blocks asyncio loop). Type safety, automatic retries, rate-limit handling. Python >=3.9. Released 2026-03-18. |
+
+### Claude Model Selection (Shipped in v1.1)
 
 Use **`claude-sonnet-4-6`** for all vision calls.
 
 | Model | Input cost | Speed | Vision | Recommendation |
 |-------|------------|-------|--------|----------------|
 | `claude-sonnet-4-6` | $3/MTok | Fast | Yes | **Use this** — best cost/speed for structured extraction |
-| `claude-haiku-4-5-20251001` | $1/MTok | Fastest | Yes | Only downgrade here after accuracy validation on real boards |
+| `claude-haiku-4-5-20251001` | $1/MTok | Fastest | Yes | Only downgrade after accuracy validation on real boards |
 | `claude-opus-4-6` | $5/MTok | Moderate | Yes | Overkill; unnecessary cost for board reading |
 
-A 1000x1000px board screenshot costs approximately $0.004 per call at Sonnet 4.6 pricing.
-All three current models support vision (image input). Haiku 3 is deprecated and retires April 19, 2026 — do not use it.
+Haiku 3 (`claude-3-haiku-20240307`) retires April 19, 2026 — do not use.
 
-### Supporting Libraries
+### Supporting Libraries (Shipped in v1.1)
 
 | Library | Version | Purpose | When to Use |
 |---------|---------|---------|-------------|
-| `Pillow` | `12.1.1` | Screenshot preprocessing — resize, crop, format convert before Claude API call | Always — resize screenshots to <=1568px per edge before encoding to keep Claude API latency low and avoid auto-downsampling. A 1000x1000px PNG uses ~1334 tokens. |
-| `opencv-python` | `4.13.0.92` | Board tile contour detection — locate grid cell boundaries | Use to find WHERE cells are; pass Claude only the relevant regions. Separates structural detection (OpenCV) from content reading (Claude Vision). |
-| `python-dotenv` | `1.2.2` | Load `DISCORD_TOKEN`, `ANTHROPIC_API_KEY` from `.env` | Always — never hardcode secrets. |
-| `aiosqlite` | `0.22.1` | Async SQLite — persist user difficulty settings, game session state | Use for user/guild preferences and board snapshots. Async-safe within discord.py's event loop. Non-blocking. |
-| `loguru` | `0.7.3` | Structured logging | Simpler than stdlib logging; async-safe; critical for debugging vision extraction failures and automation timing. |
-| `aiohttp` | `3.x` | Async HTTP client | Only if webhook delivery or external API calls are needed beyond the anthropic SDK. |
+| `Pillow` | `12.1.1` | Screenshot preprocessing — resize, crop, format convert before Claude API call | Always — resize screenshots to <=1568px per edge before encoding |
+| `opencv-python` | `4.13.0.92` | Board tile contour detection and canvas blank detection | Always for vision pipeline; also used in v1.2 turn detection |
+| `python-dotenv` | `1.2.2` | Load `DISCORD_TOKEN`, `ANTHROPIC_API_KEY`, and new `DISCORD_PLAYER_TOKEN` from `.env` | Always — never hardcode secrets |
+| `aiosqlite` | `0.22.1` | Async SQLite — persist per-channel settings, game session state | Use for settings and game session tracking in v1.2 |
+| `loguru` | `0.7.3` | Structured logging | Critical for debugging automation timing and vision extraction failures |
 
-### Development Tools
+### Development Tools (Shipped in v1.1)
 
 | Tool | Purpose | Notes |
 |------|---------|-------|
-| `playwright install chromium` | Download Chromium browser binary | Run once after `pip install playwright`. Only need Chromium — Discord Activity is Chromium-based. Firefox/WebKit not needed. |
-| `pytest-asyncio` | Async test support for discord.py event handlers and vision pipeline | Already in project. Pin to `>=0.23`. |
-| `black` | Code formatting | Zero-config, prevents style debates. |
-| `pyright` / `pylance` | Type checking | discord.py 2.x and playwright ship type stubs. Catches API misuse early. |
-| `uv` | Fast dependency management | Replaces pip+venv for speed and lock-file support. `uv sync` = `pip install -r requirements.txt`. |
+| `playwright install chromium` | Download Chromium binary | Run once after `pip install patchright` (patchright bundles same Chromium) |
+| `pytest-asyncio >=0.23` | Async test support | `asyncio_mode = "auto"` in pytest.ini |
+| `pyright` / `pylance` | Type checking | playwright and patchright ship type stubs |
 
 ---
 
 ## Installation
 
 ```bash
-# New dependencies only (add to existing requirements.txt)
-pip install "discord.py==2.7.1"
-pip install "anthropic==0.86.0"
-pip install "playwright==1.58.0"
-pip install "Pillow==12.1.1"
-pip install "opencv-python==4.13.0.92"
-pip install "python-dotenv==1.2.2"
-pip install "aiosqlite==0.22.1"
-pip install "loguru==0.7.3"
+# New dependencies for v1.2 (add to existing requirements)
+pip install "patchright==1.58.2"
 
-# One-time browser install (Chromium only)
-playwright install chromium
+# One-time browser install (Chromium only — patchright uses same binary as playwright)
+python -m patchright install chromium
 
-# Dev additions
-pip install "pytest-asyncio>=0.23"
+# numpy is already present as a transitive dependency of opencv-python
+# Verify: python -c "import numpy; print(numpy.__version__)"
 ```
 
----
-
-## Integration Points With Existing v1.0 Code
-
-### Vision pipeline feeds the existing engine
-
-The Claude vision call produces a board state dict. That maps directly to the
-existing `Board` class. The vision module is a new layer on top — it generates
-input, the v1.0 engine consumes it unchanged.
-
-```
-Screenshot (PNG bytes from Discord attachment or Playwright)
-    → VisionPipeline.extract_board_state()      [new v1.1]
-    → Board(grid, rack, mode)                   [existing v1.0]
-    → MoveGenerator.find_all_moves()            [existing v1.0]
-    → DifficultyEngine.select_move()            [existing v1.0]
-    → formatted suggestion string               [new v1.1 formatting]
-```
-
-### discord.py runs on asyncio — Playwright must use async API
-
-discord.py uses Python's asyncio event loop. Playwright ships both sync and async
-APIs. Using the sync API inside discord.py's loop raises a hard runtime error:
-
-> Error: It looks like you are using Playwright Sync API inside the asyncio loop.
-
-Always use `playwright.async_api` (`async_playwright`), never `playwright.sync_api`.
-
-```python
-# Correct — async API only
-from playwright.async_api import async_playwright
-
-async def capture_activity_screenshot() -> bytes:
-    async with async_playwright() as p:
-        browser = await p.chromium.launch()
-        page = await browser.new_page()
-        # navigate, wait, screenshot
-        screenshot = await page.screenshot()
-        await browser.close()
-        return screenshot
-```
-
-### Attachment reading in advisor mode
-
-discord.py's `Attachment.read()` is an async coroutine returning raw bytes.
-Pass directly to the vision pipeline — no temp files needed.
-
-```python
-@bot.event
-async def on_message(message: discord.Message):
-    if message.attachments:
-        attachment = message.attachments[0]
-        # Validate content type before processing
-        if attachment.content_type and attachment.content_type.startswith("image/"):
-            img_bytes: bytes = await attachment.read()
-            board_state = await vision.extract_board_state(img_bytes)
-```
-
-### Claude Vision API call structure
-
-Images arrive as PNG bytes. Encode to base64, send with structured extraction prompt.
-Image first in content array for best performance per Anthropic docs.
-
-```python
-import base64
-import anthropic
-
-client = anthropic.AsyncAnthropic()
-
-async def extract_board_state(img_bytes: bytes) -> dict:
-    img_b64 = base64.standard_b64encode(img_bytes).decode("utf-8")
-    response = await client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2048,
-        messages=[{
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/png",
-                        "data": img_b64,
-                    },
-                },
-                {
-                    "type": "text",
-                    "text": "Extract the Letter League board state as JSON..."
-                }
-            ]
-        }]
-    )
-    return parse_json(response.content[0].text)
-```
+**Note on patchright vs playwright install:** If both are installed, they share the same Chromium binary. Only one `install chromium` command is needed. Patchright does not require a separate browser download.
 
 ---
 
@@ -194,15 +245,12 @@ async def extract_board_state(img_bytes: bytes) -> dict:
 
 | Recommended | Alternative | When to Use Alternative |
 |-------------|-------------|-------------------------|
-| `discord.py 2.7.1` | `Pycord (py-cord)` | Never for this project — project constraint specifies discord.py. Pycord is a community fork with slightly faster slash command iteration; consider only if discord.py development stalls long-term. |
-| `discord.py 2.7.1` | `nextcord` | Never. Less popular fork, higher ecosystem fragmentation risk. |
-| `playwright` (async) | `selenium` | Only if team has existing Selenium infrastructure and can't retrain. Playwright is the 2025-2026 standard: faster, better async, native iframe handling. |
-| `playwright` (async) | `PyAutoGUI` + window | Fallback only if Discord refuses to run in headless Chromium. PyAutoGUI clicks screen coordinates; brittle to window position/resolution changes. |
-| `claude-sonnet-4-6` | `claude-haiku-4-5` | After validating accuracy on real board screenshots. Haiku is 3x cheaper but less reliable on structured visual extraction. Start with Sonnet. |
-| base64 image encoding | Claude Files API | Use Files API only for multi-turn conversations reusing the same image. For single-shot board reads, base64 is simpler and has no upload overhead. |
-| `anthropic` SDK | Raw `httpx` calls | Never. SDK provides type safety, retry logic, rate-limit handling, and streaming — all needed in production. |
-| `EasyOCR` | Claude Vision API | Only if API costs become hard constraint. EasyOCR is open-source and GPU-accelerated but struggles with custom game fonts, colored tile backgrounds, and structured layouts that Claude handles naturally with prompt guidance. |
-| `aiosqlite` + SQLite | `asyncpg` + PostgreSQL | Only if scaling to >100 concurrent games or multi-server shared state. SQLite is sufficient for single-server or personal use. |
+| `patchright 1.58.2` | `playwright 1.58.0` (vanilla) | Use vanilla playwright if patchright introduces async API incompatibilities. The import change is the only difference — rollback is one line. |
+| `patchright 1.58.2` | `selenium` | Never for this project. No native async support; brittle with Discord's React SPA; slower startup; requires separate WebDriver binary management. |
+| `launch_persistent_context(user_data_dir=...)` | `storage_state` JSON | Use storage_state only if the user_data_dir approach causes file-lock issues on Windows. Tradeoff: storage_state doesn't preserve Chrome-level session caches, so Discord may re-prompt authentication more frequently. |
+| `page.mouse.click(x, y)` for canvas | `locator.click(position={...})` | Use `locator.click(position=...)` when a canvas locator is available and coordinates are relative to the canvas element. `page.mouse.click()` is preferred for absolute coordinate math from the vision pipeline output. |
+| Screenshot bytes + OpenCV blank detection | `page.evaluate()` canvas pixel read | Use `page.evaluate()` only if the Activity iframe is same-origin (allowing `getContext('2d').getImageData()`). For cross-origin Discord Activity iframes, `getImageData()` throws a SecurityError. Screenshot approach is safe in both cases. |
+| `asyncio.sleep()` polling for turn detection | Playwright `expect(locator).to_have_attribute()` | DOM-based waits are cleaner but require a DOM element reflecting turn state. Letter League is canvas-rendered with no such element — screenshot polling is the only option. |
 
 ---
 
@@ -210,45 +258,43 @@ async def extract_board_state(img_bytes: bytes) -> dict:
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| `discord-self` / `discum` / any self-bot library | Automating a user account violates Discord TOS. Discord explicitly prohibits self-bots and bans accounts that use them. Confirmed active enforcement. | `discord.py 2.7.1` with proper bot application token |
-| `playwright.sync_api` inside discord.py | Raises hard runtime error: sync API cannot run inside asyncio loop. | `playwright.async_api` with `async_playwright()` throughout |
-| `selenium` | No native async support; brittle with Discord's React SPA; slower startup; separate driver binary management | `playwright` 1.58.0 |
-| `Tesseract OCR` | Requires clean, pre-processed input. Game board screenshots have colored tiles, custom fonts, decorative borders. Tesseract accuracy on game assets is poor without extensive preprocessing. | Claude Vision via `anthropic` SDK |
-| `requests` (sync HTTP) | Blocking in discord.py's asyncio event loop. Any sync network call blocks the entire bot. | `aiohttp` or `anthropic` SDK's async client (`AsyncAnthropic`) |
-| `OpenAI GPT-4V` | Adds a second API vendor and cost center. Claude Vision is already specified in project constraints and performs equivalently for structured extraction. | `anthropic` SDK with `claude-sonnet-4-6` |
-| `threading` for Playwright | Running Playwright in threads alongside discord.py's asyncio loop causes event loop conflicts. | `playwright.async_api` natively within discord.py's loop |
-| `PyAutoGUI` for browser automation | Screen-coordinate clicking breaks on resolution changes, window repositioning, or partial visibility. No concept of DOM, waits, or element visibility. | `playwright` async API |
-| JSON files for state persistence | Not a database — no atomicity, no concurrent write safety, no query capability. Breaks under concurrent game sessions. | `aiosqlite` |
-| `claude-3-haiku-20240307` (Haiku 3) | Deprecated. Retiring April 19, 2026. | `claude-haiku-4-5-20251001` if cost is priority |
+| `playwright.sync_api` inside discord.py | Raises hard runtime error: "It looks like you are using Playwright Sync API inside the asyncio loop." discord.py owns the event loop; sync Playwright tries to create a new one. | `patchright.async_api` with `async_playwright()` throughout |
+| `discord-self` / `discum` / any self-bot library | Automating a user account via a bot-token-style API violates Discord TOS. Discord explicitly prohibits self-bots and actively enforces bans. The autonomous play feature uses a **dedicated human account** operated via the browser (not the Discord bot API). | Playwright browser session logged in as a real user account |
+| `async with async_playwright() as p:` for long-lived sessions | The context manager calls `playwright.stop()` on exit, closing all browsers. For a game session spanning minutes, the browser would close when the `async with` block ends. | `pw = await async_playwright().start()` + manual `await pw.stop()` in `bot.close()` |
+| `threading` with Playwright | Playwright is single-threaded by design. Running Playwright in a thread alongside discord.py's asyncio loop causes `greenlet.error: cannot switch to a different thread`. | `patchright.async_api` natively within discord.py's asyncio loop |
+| `PyAutoGUI` for click automation | Screen-coordinate clicking breaks on window repositioning, resolution changes, or partial visibility. No concept of DOM, waits, or element visibility. Requires a real display at known coordinates. | Playwright/patchright `page.mouse.click()` which operates on the browser's internal coordinate system regardless of window position |
+| `selenium` | No native async support; brittle with Discord's React SPA; slower startup; requires ChromeDriver binary separate from browser | `patchright 1.58.2` async API |
+| `requests` / any sync HTTP inside discord.py | Blocking in asyncio event loop. Halts entire bot during network calls. | `anthropic.AsyncAnthropic`, `aiohttp` |
+| Headless mode (`headless=True`) for Discord | Discord's web client and Activity iframes detect headless Chromium via canvas fingerprinting, WebGL renderer string, and navigator properties. Known to trigger "Something went wrong" or blank Activity loads. | `headless=False` with patchright (which additionally patches CDP fingerprint leaks) |
+| Committing `cache/browser_profile/` | Contains Discord session cookies and tokens. Exposure = account compromise. | Add `cache/browser_profile/` to `.gitignore` |
+| `claude-3-haiku-20240307` (Haiku 3) | Deprecated. Retiring April 19, 2026. | `claude-haiku-4-5-20251001` if cost is the priority |
 
 ---
 
 ## Stack Patterns by Variant
 
-**Advisor mode (recommended to build first — zero TOS risk):**
-- User drops screenshot in Discord channel
-- `on_message` handler downloads attachment bytes via `discord.Attachment.read()`
-- Pillow resizes if needed; OpenCV detects grid boundaries
-- Claude Vision call returns board state JSON
-- GADDAG engine finds all moves, DifficultyEngine selects by % setting
-- Bot replies with formatted best-move suggestion
-- No Playwright needed for this mode
+**Autonomous mode — full browser session lifecycle:**
+- `launch_persistent_context(user_data_dir="cache/browser_profile", headless=False)` on bot startup
+- Store browser context on `bot` instance; reuse across game sessions
+- Log in manually once to populate `cache/browser_profile/`; all subsequent restarts reuse the session
+- Navigate with `page.goto(f"https://discord.com/channels/{guild_id}/{channel_id}")`
+- Locate Activity iframe with `page.frame_locator('iframe[src*="activities"]')`
+- Screenshot loop: capture → blank check → vision pipeline → move gen → click tiles
 
-**Autonomous mode (build after advisor mode — TOS constraint must be resolved first):**
-- Playwright launches headless Chromium
-- Logs in to Discord as a dedicated player account (see critical note below)
-- Navigates to voice channel Activity URL, waits for Letter League iframe
-- Screenshots board at each turn
-- Vision pipeline → GADDAG → DifficultyEngine → move selection
-- Playwright clicks tile rack and board squares to place word
-- Loops until game end
+**Autonomous mode — turn detection loop:**
+- Poll `page.screenshot(clip=rack_region)` every 2 seconds
+- Compare bytes directly (`current != last`) for fast no-diff case
+- On change: run full vision pipeline → select move → place tiles
+- No DOM event listener available (canvas-rendered game)
 
-**Critical constraint for autonomous mode:** Discord Activities require a user account logged in via the browser. Discord API bots (application accounts) cannot join Activities through the Discord API. Any user account automation is potentially TOS-violating (self-botting). This is an unresolved architectural blocker — see PITFALLS.md.
+**Development / debugging mode:**
+- `headless=False` always (required for Discord)
+- `slow_mo=50` in `launch_persistent_context` to slow clicks for visual inspection
+- `page.pause()` for interactive Playwright Inspector breakpoints
 
-**If vision call cost becomes a concern:**
-- Resize screenshots to 1000x1000px before encoding (saves ~$0.002/call vs full res)
-- Downgrade to `claude-haiku-4-5` only after accuracy validation on real boards
-- Consider caching extracted board state when screenshot hasn't changed
+**If patchright causes compatibility issues:**
+- Revert: change `from patchright.async_api import async_playwright` back to `from playwright.async_api import async_playwright`
+- No other code changes required
 
 ---
 
@@ -256,33 +302,44 @@ async def extract_board_state(img_bytes: bytes) -> dict:
 
 | Package | Compatible With | Notes |
 |---------|-----------------|-------|
-| `discord.py 2.7.1` | Python >=3.8 | Project uses Python 3.11 — fully compatible |
-| `anthropic 0.86.0` | Python >=3.9 | Python 3.11 is supported; use `AsyncAnthropic` client |
-| `playwright 1.58.0` | Python >=3.9 | Python 3.11 supported; requires ProactorEventLoop on Windows (auto-set by Python 3.8+) |
-| `Pillow 12.1.1` | Python 3.9+ | Python 3.11 supported; no conflicts |
-| `opencv-python 4.13.0.92` | Python 3.8–3.12 | Python 3.11 supported; 3.13 wheel availability unconfirmed — not an issue with project's 3.11 |
-| `aiosqlite 0.22.1` | Python 3.8+ | No compatibility concerns |
-| `pytest-asyncio >=0.23` | Python >=3.8 | Use `asyncio_mode = "auto"` in pytest.ini for cleaner test syntax |
-| `python-dotenv 1.2.2` | Python >=3.8 | No compatibility concerns |
+| `patchright 1.58.2` | Python >=3.9 | Python 3.10 (project runtime) fully supported |
+| `patchright 1.58.2` | `discord.py 2.7.1` | Both use asyncio; patchright async API runs in discord.py's event loop without conflict |
+| `patchright 1.58.2` | `opencv-python 4.13.0.92` | No interaction; both used independently in the automation pipeline |
+| `patchright 1.58.2` | Windows ProactorEventLoop | Python 3.10 on Windows auto-uses ProactorEventLoop; required by Playwright/patchright. No manual configuration needed. |
+| `discord.py 2.7.1` | Python 3.10 | Fully compatible |
+| `anthropic 0.86.0` | Python 3.10 | Fully compatible; `AsyncAnthropic` required |
+| `Pillow 12.1.1` | Python 3.10 | No conflicts |
+| `opencv-python 4.13.0.92` | Python 3.10 | No conflicts |
 
-**Windows-specific note for Playwright:** On Windows, Python 3.8+ automatically uses
-`ProactorEventLoop` (required by Playwright). No manual configuration needed.
+---
+
+## Environment Variables (v1.2 additions)
+
+| Variable | Purpose | Notes |
+|----------|---------|-------|
+| `BROWSER_PROFILE_PATH` | Path to Playwright persistent context user data dir | Default: `cache/browser_profile`. Add to `.gitignore`. |
+| `DISCORD_PLAYER_ACCOUNT_EMAIL` | Email for the Discord player account used in auto-play | Only needed for initial manual login setup; not read by the bot at runtime once the profile is saved. |
+
+The bot does NOT read the player account credentials at runtime. Credentials are entered manually during the one-time browser login setup. The persistent context saves the resulting session.
 
 ---
 
 ## Sources
 
-- [discord.py PyPI](https://pypi.org/project/discord.py/) — v2.7.1 verified March 2026 (HIGH confidence)
-- [anthropic PyPI](https://pypi.org/project/anthropic/) — v0.86.0, released 2026-03-18, Python >=3.9 (HIGH confidence)
 - [playwright PyPI](https://pypi.org/project/playwright/) — v1.58.0, released 2026-01-30, Python >=3.9 (HIGH confidence)
-- [Anthropic Claude Models Overview](https://platform.claude.com/docs/en/about-claude/models/overview) — model IDs `claude-sonnet-4-6`, `claude-haiku-4-5-20251001`, pricing, vision support, Haiku 3 deprecation (HIGH confidence — official docs)
-- [Anthropic Vision Docs](https://platform.claude.com/docs/en/build-with-claude/vision) — image formats (JPEG/PNG/GIF/WebP), 5MB API limit, base64 encoding, image-before-text ordering for best results, token cost formula (HIGH confidence — official docs)
-- [Discord Self-Bot TOS Policy](https://support.discord.com/hc/en-us/articles/115002192352-Automated-User-Accounts-Self-Bots) — confirms self-bots prohibited (HIGH confidence)
-- [Playwright async/asyncio integration](https://github.com/microsoft/playwright-python/issues/1760) — confirms sync API raises hard error in asyncio loops (HIGH confidence)
-- [discord.py 2.0 app_commands guide](https://www.pythondiscord.com/pages/guides/python-guides/app-commands/) — slash command structure in v2.x (MEDIUM confidence)
-- [discord.py attachment handling](https://discordpy.readthedocs.io/en/latest/api.html) — `Attachment.read()` returns bytes (HIGH confidence — official docs)
+- [patchright PyPI](https://pypi.org/project/patchright/) — v1.58.2, released 2026-03-07, drop-in Playwright replacement, Chromium-only (HIGH confidence)
+- [Playwright Auth docs](https://playwright.dev/python/docs/auth) — `storage_state` vs `launch_persistent_context` tradeoffs (HIGH confidence — official docs)
+- [Playwright BrowserType API](https://playwright.dev/python/docs/api/class-browsertype) — `launch_persistent_context` parameters, `user_data_dir` semantics (HIGH confidence — official docs)
+- [Playwright FrameLocator API](https://playwright.dev/python/docs/api/class-framelocator) — iframe addressing, `content_frame`, strictness behavior (HIGH confidence — official docs)
+- [Playwright Screenshots docs](https://playwright.dev/python/docs/screenshots) — `clip` parameter, bytes return, element screenshots (HIGH confidence — official docs)
+- [Playwright Evaluating JS docs](https://playwright.dev/python/docs/evaluating) — `page.evaluate()` API, cross-environment isolation, canvas pixel data pattern (HIGH confidence — official docs)
+- [Playwright Locator API](https://playwright.dev/python/docs/api/class-locator) — `click(position=...)`, `bounding_box()`, `page.mouse.click()` (HIGH confidence — official docs)
+- [playwright-python issue #1418](https://github.com/microsoft/playwright-python/issues/1418) — confirms single-threaded design; `async_playwright().start()` pattern for long-lived sessions (HIGH confidence)
+- [Discord channel URL format](https://support.discord.com/hc/en-us/articles/206346498) — `https://discord.com/channels/{guild_id}/{channel_id}` confirmed standard format (HIGH confidence)
+- [Discord Self-Bot TOS Policy](https://support.discord.com/hc/en-us/articles/115002192352) — confirms self-bots prohibited; browser automation of a user account is the required (and risky) approach (HIGH confidence)
+- [Patchright vs Playwright comparison — DEV Community](https://dev.to/claudeprime/patchright-vs-playwright-when-to-use-the-stealth-browser-fork-382a) — CDP leak patching, drop-in replacement API (MEDIUM confidence — third-party)
 
 ---
 
-*Stack research for: Letter League Bot v1.1 — Vision + Discord Integration*
+*Stack research for: Letter League Bot v1.2 — Browser Automation + Autonomous Play*
 *Researched: 2026-03-24*

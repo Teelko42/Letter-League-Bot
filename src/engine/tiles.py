@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# Standard Scrabble letter point values
+# Letter League tile point values (same as Scrabble except L=2)
 TILE_VALUES: dict[str, int] = {
     'A': 1,
     'B': 3,
@@ -13,7 +13,7 @@ TILE_VALUES: dict[str, int] = {
     'I': 1,
     'J': 8,
     'K': 5,
-    'L': 1,
+    'L': 2,
     'M': 3,
     'N': 1,
     'O': 1,

@@ -166,7 +166,7 @@ class TestClassicMode:
 
     def test_classic_bingo_doubles_main_word(self):
         """Use all 7 rack tiles -- main word score x2 (bingo). Perp NOT doubled."""
-        # Word PLACING: P(3)+L(1)+A(1)+C(3)+I(1)+N(1)+G(2) = 12, word_mult=1
+        # Word PLACING: P(3)+L(2)+A(1)+C(3)+I(1)+N(1)+G(2) = 13, word_mult=1
         cells = [
             make_cell(7, 7, 'P'),
             make_cell(7, 8, 'L'),
@@ -184,8 +184,8 @@ class TestClassicMode:
         ]
         bd = score_move(cells, placed, [perp], tiles_from_rack=7, rack_size=7, mode='classic')
         assert bd.bingo_multiplier == 2
-        # main = 12 * 1 * 2 = 24; perp = 3 (NOT doubled)
-        assert bd.total == 24 + 3
+        # main = 13 * 1 * 2 = 26; perp = 3 (NOT doubled)
+        assert bd.total == 26 + 3
 
     def test_classic_bingo_partial_rack(self):
         """Rack has 4 tiles, all 4 used -- bingo fires."""

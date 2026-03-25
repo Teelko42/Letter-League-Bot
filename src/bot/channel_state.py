@@ -16,10 +16,10 @@ class ChannelState:
     Attributes:
         difficulty: Strength percentage 0-100. 100 = optimal play (strongest),
             0 = weakest possible move. Default: 100.
-        mode:       Game mode — "classic" or "wild". Default: "classic".
+        mode:       Game mode — "classic" or "wild". Default: "wild".
     """
     difficulty: int = 100
-    mode: str = "classic"
+    mode: str = "wild"
 
 
 class ChannelStore:

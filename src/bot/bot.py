@@ -4,9 +4,12 @@ Run the bot:
     python -m src.bot.bot
 
 Environment variables (load via .env):
-    DISCORD_TOKEN        Required. Bot token from Discord Developer Portal.
-    WORDLIST_PATH        Optional. Path to wordlist file (default: data/wordlist.txt).
-    GADDAG_CACHE_PATH    Optional. Path to GADDAG pickle cache (default: cache/gaddag.pkl).
+    DISCORD_TOKEN           Required. Bot token from Discord Developer Portal.
+    WORDLIST_PATH           Optional. Path to wordlist file (default: data/wordlist.txt).
+    GADDAG_CACHE_PATH       Optional. Path to GADDAG pickle cache (default: cache/gaddag.pkl).
+    DISCORD_TEST_GUILD_ID   Optional. Guild ID for instant command sync during development.
+                            When set, commands sync to the test guild immediately rather
+                            than waiting up to 1 hour for global propagation.
 """
 
 from __future__ import annotations
@@ -84,11 +87,23 @@ class LetterLeagueBot(commands.Bot):
         self.difficulty_engine = DifficultyEngine()
         logger.info("DifficultyEngine initialised")
 
-        # Cog registration is deferred to Plan 04-02:
-        # await self.add_cog(AdvisorCog(self))
+        # Register the AdvisorCog after all resources are loaded so that command
+        # handlers can safely access self.gaddag and self.difficulty_engine.
+        from src.bot.cog import AdvisorCog  # local import avoids circular dependency
+        await self.add_cog(AdvisorCog(self))
+        logger.info("AdvisorCog registered")
 
-        await self.tree.sync()
-        logger.info("Bot setup complete — commands synced to Discord")
+        # For dev: sync to test guild instantly. Set DISCORD_TEST_GUILD_ID in .env
+        # for fast iteration. Without it, global sync can take up to 1 hour.
+        guild_id = os.environ.get("DISCORD_TEST_GUILD_ID")
+        if guild_id:
+            guild = discord.Object(id=int(guild_id))
+            self.tree.copy_global_to(guild=guild)
+            await self.tree.sync(guild=guild)
+            logger.info("Commands synced to test guild {}", guild_id)
+        else:
+            await self.tree.sync()
+            logger.info("Commands synced globally (may take up to 1 hour)")
 
     async def on_ready(self) -> None:
         """Emitted when the bot has connected to the Discord gateway."""

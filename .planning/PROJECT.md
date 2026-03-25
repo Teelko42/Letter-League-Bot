@@ -25,6 +25,18 @@ The bot must be able to analyze a Letter League board state and find the best po
 
 - [ ] Autonomous mode: bot joins voice channel via own Discord account, opens Activity with Playwright, plays as a participant
 
+## Current Milestone: v1.2 Browser Automation + Autonomous Play
+
+**Goal:** Enable the bot to autonomously join a Letter League game via Playwright, detect its turn, place tiles, and complete plays without human intervention.
+
+**Target features:**
+- Persistent Playwright browser session with saved Discord login
+- Navigate Discord web client to voice channel and open Letter League Activity
+- Capture non-blank canvas screenshots from Activity iframe
+- Turn detection via visual state changes
+- Tile placement by clicking rack tiles and board cells at computed coordinates
+- Word confirmation via game UI
+
 ### Out of Scope
 
 - Mobile app or standalone GUI — Discord bot only
@@ -82,4 +94,4 @@ Discord bot: slash commands (/analyze, /setdifficulty, /setmode) with per-channe
 | Per-channel in-memory state | No persistence needed for initial advisor mode | ✓ Good — simple, resets on restart |
 
 ---
-*Last updated: 2026-03-25 after v1.1 milestone*
+*Last updated: 2026-03-24 after v1.2 milestone start*

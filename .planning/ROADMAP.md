@@ -32,7 +32,7 @@ See: `.planning/milestones/v1.0-ROADMAP.md` for full details.
 **Milestone Goal:** Enable the bot to read Letter League board state from screenshots and play the game — either advising a user or playing autonomously via browser automation.
 
 - [x] **Phase 3: Vision Pipeline** — Board state extraction from screenshots via Claude Vision API (completed 2026-03-24)
-- [ ] **Phase 4: Discord Advisor Mode** — End-to-end MVP: screenshot in, word suggestion out
+- [x] **Phase 4: Discord Advisor Mode** — End-to-end MVP: screenshot in, word suggestion out (completed 2026-03-25)
 - [ ] **Phase 5: Browser Automation Foundation** — Playwright infrastructure for Discord Activity interaction
 - [ ] **Phase 6: Autonomous Play** — Bot joins game, detects turn, and places tiles independently
 
@@ -94,6 +94,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 1. Word Engine | v1.0 | 4/4 | Complete | 2026-03-24 |
 | 2. Difficulty System | v1.0 | 2/2 | Complete | 2026-03-24 |
 | 3. Vision Pipeline | 2/2 | Complete   | 2026-03-24 | - |
-| 4. Discord Advisor Mode | 1/2 | In Progress|  | - |
+| 4. Discord Advisor Mode | 2/2 | Complete   | 2026-03-25 | - |
 | 5. Browser Automation Foundation | v1.1 | 0/? | Not started | - |
 | 6. Autonomous Play | v1.1 | 0/? | Not started | - |

@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Vision + Discord Integration
-status: in_progress
-last_updated: "2026-03-25T01:49:42Z"
+status: unknown
+last_updated: "2026-03-25T01:56:14.277Z"
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 1
+  total_phases: 2
+  completed_phases: 2
+  total_plans: 4
+  completed_plans: 4
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** Analyze a Letter League board state and find the best possible word placement
-**Current focus:** Phase 4 — Discord Advisor Mode (plan 1 of 3 complete)
+**Current focus:** Phase 4 — Discord Advisor Mode (plan 2 of 3 — at human-verify checkpoint)
 
 ## Current Position
 
 Phase: 4 of 6 (Discord Advisor Mode)
-Plan: 1 of 3 complete
+Plan: 2 of 3 (at human-verify checkpoint — Task 2 awaiting Discord guild verification)
 Status: In Progress
-Last activity: 2026-03-25 — 04-01 complete (bot skeleton, channel state, formatter, embed builders)
+Last activity: 2026-03-25 — 04-02 Task 1 complete (AdvisorCog with /analyze, /setdifficulty, /setmode)
 
-Progress: [███░░░░░░░] 33% (1/3 plans complete in Phase 4)
+Progress: [██████░░░░] 67% (2/3 plans complete in Phase 4)
 
 ## Performance Metrics
 
@@ -57,6 +57,7 @@ Progress: [███░░░░░░░] 33% (1/3 plans complete in Phase 4)
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | 04-01 Bot Skeleton + Formatter | 3 min | 3 | 4 |
+| 04-02 AdvisorCog Slash Commands | 2 min | 1 | 2 |
 
 ## Accumulated Context
 
@@ -80,6 +81,9 @@ Recent decisions affecting v1.1:
 - [Phase 04-discord-advisor-mode]: Per-channel settings are in-memory only (reset on restart) — no persistence layer for initial advisor mode
 - [Phase 04-discord-advisor-mode]: GADDAG loaded fail-loud in setup_hook via asyncio.to_thread — bot refuses to start without core resource
 - [Phase 04-discord-advisor-mode]: Formatter is a pure-function module (no bot/interaction refs) — testable in isolation
+- [Phase 04-discord-advisor-mode]: defer-first pattern in /analyze: await interaction.response.defer(ephemeral=True) as absolute first line to prevent Discord 3s timeout
+- [Phase 04-discord-advisor-mode]: Local import of AdvisorCog inside setup_hook to avoid circular dependency at module load time
+- [Phase 04-discord-advisor-mode]: DISCORD_TEST_GUILD_ID env var for instant test guild command sync vs 1-hour global propagation
 
 ### Pending Todos
 
@@ -95,5 +99,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-25
-Stopped at: Completed 04-01-PLAN.md (bot skeleton, channel state, formatter, embed builders)
+Stopped at: Checkpoint 04-02 Task 2 — AdvisorCog implemented (3839ec8), awaiting human verify in Discord guild
 Resume file: None

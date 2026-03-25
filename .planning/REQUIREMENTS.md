@@ -18,10 +18,10 @@ Requirements for milestone v1.1: Vision + Discord Integration. Each maps to road
 ### Discord Bot
 
 - [x] **DISC-01**: Discord bot connects to gateway with proper token auth and privileged intents
-- [ ] **DISC-02**: User can run `/analyze` slash command with a screenshot attachment to receive move suggestions
+- [x] **DISC-02**: User can run `/analyze` slash command with a screenshot attachment to receive move suggestions
 - [x] **DISC-03**: Bot responds with top-3 move recommendations (word, position, direction, score) as an ephemeral message
-- [ ] **DISC-04**: User can run `/setdifficulty` to configure bot play strength (0-100%)
-- [ ] **DISC-05**: User can specify Classic or Wild scoring mode as a parameter
+- [x] **DISC-04**: User can run `/setdifficulty` to configure bot play strength (0-100%)
+- [x] **DISC-05**: User can specify Classic or Wild scoring mode as a parameter
 - [x] **DISC-06**: Bot returns actionable error messages for bad screenshots, API failures, or zero valid moves
 
 ### Browser Automation
@@ -79,10 +79,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VISN-04 | Phase 3 | Complete |
 | VISN-05 | Phase 3 | Complete |
 | DISC-01 | Phase 4 | Complete |
-| DISC-02 | Phase 4 | Pending |
+| DISC-02 | Phase 4 | Complete |
 | DISC-03 | Phase 4 | Complete |
-| DISC-04 | Phase 4 | Pending |
-| DISC-05 | Phase 4 | Pending |
+| DISC-04 | Phase 4 | Complete |
+| DISC-05 | Phase 4 | Complete |
 | DISC-06 | Phase 4 | Complete |
 | AUTO-01 | Phase 5 | Pending |
 | AUTO-02 | Phase 5 | Pending |

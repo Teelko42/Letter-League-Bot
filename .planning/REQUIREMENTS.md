@@ -21,7 +21,7 @@ Requirements for milestone v1.2: Browser Automation + Autonomous Play. Each maps
 
 ### Turn Detection
 
-- [ ] **TURN-01**: Bot detects when it is the active player via visual state polling and does not act out of turn
+- [x] **TURN-01**: Bot detects when it is the active player via visual state polling and does not act out of turn
 
 ### Tile Placement
 
@@ -79,7 +79,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ANAV-01 | Phase 5 | Pending |
 | ANAV-02 | Phase 5 | Pending |
 | ANAV-03 | Phase 5 | Pending |
-| TURN-01 | Phase 6 | Pending |
+| TURN-01 | Phase 6 | Complete |
 | TILE-01 | Phase 7 | Pending |
 | TILE-02 | Phase 7 | Pending |
 | TILE-03 | Phase 7 | Pending |

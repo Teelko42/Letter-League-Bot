@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Analyze a Letter League board state and find the best possible word placement
-**Current focus:** Phase 5 — Browser Foundation (plan 2 of 3 complete — awaiting human verify)
+**Current focus:** Phase 6 — Turn Detection (plan 1 of 2 complete)
 
 ## Current Position
 
-Phase: 5 of 8 (Browser Foundation)
-Plan: 2 of 3 complete (awaiting checkpoint:human-verify for Task 3)
-Status: In progress — paused at human-verify checkpoint
-Last activity: 2026-03-25 — 05-02 Navigator + capture pipeline built; awaiting live Discord verification
+Phase: 6 of 8 (Turn Detection)
+Plan: 1 of 2 complete
+Status: In progress
+Last activity: 2026-03-26 — 06-01 Turn detector module + calibration script built
 
-Progress: [████░░░░░░] 44% (phases 1-4 complete; phase 5 plans 1-2 done, plan 2 pending verify)
+Progress: [█████░░░░░] 50% (phases 1-5 complete; phase 6 plan 1 done)
 
 ## Performance Metrics
 
@@ -36,7 +36,8 @@ Progress: [████░░░░░░] 44% (phases 1-4 complete; phase 5 pla
 | 2. Difficulty System | 2 | ~13 min | ~6.5 min |
 | 3. Vision Pipeline | 2 | ~6 min | ~3 min |
 | 4. Discord Advisor Mode | 2 | ~8 min | ~4 min |
-| 5. Browser Foundation | 1/3 | ~2 min | ~2 min |
+| 5. Browser Foundation | 3/3 | ~8 min | ~2.7 min |
+| 6. Turn Detection | 1/2 | ~2 min | ~2 min |
 
 **Recent Trend:**
 - Last 4 plans: ~3 min, ~3 min, ~4 min, ~4 min
@@ -61,6 +62,10 @@ v1.2 decisions so far:
 - capture_canvas() and extract_board_state() kept separate — entry-point script chains them (capture stays reusable)
 - Primary canvas capture uses FrameLocator.screenshot(); falls back to frame.evaluate(canvas.toDataURL())
 - is_non_blank() uses np.std() threshold of 5.0 for pixel-variance blank detection pre-check
+- game_over evaluated before my_turn in classify_frame to prevent post-game infinite polling
+- Quiet logging pattern: only log on turn state-change transitions, not every poll cycle
+- Fractional ROI constants (BANNER_ROI_FRAC) rather than absolute pixel coordinates — resolution-independent
+- All HSV turn-detection constants are placeholders; Plan 02 calibrates from live screenshots
 
 ### Pending Todos
 
@@ -75,6 +80,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-25
-Stopped at: 05-02-PLAN.md Task 3 checkpoint:human-verify — navigate_to_activity + capture_canvas built; live Discord verification required
+Last session: 2026-03-26
+Stopped at: Completed 06-01-PLAN.md — turn detector + calibration script done; Plan 02 calibrates HSV constants from live gameplay
 Resume file: None

@@ -111,6 +111,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Vision Pipeline | v1.1 | 2/2 | Complete | 2026-03-24 |
 | 4. Discord Advisor Mode | v1.1 | 2/2 | Complete | 2026-03-25 |
 | 5. Browser Foundation | 1/2 | In Progress|  | - |
-| 6. Turn Detection | v1.2 | 0/2 | Planned | - |
+| 6. Turn Detection | 1/2 | In Progress|  | - |
 | 7. Tile Placement | v1.2 | 0/? | Not started | - |
 | 8. Autonomous Game Loop | v1.2 | 0/? | Not started | - |

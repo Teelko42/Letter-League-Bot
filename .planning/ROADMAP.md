@@ -43,7 +43,7 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
 **Milestone Goal:** Enable the bot to join Letter League games autonomously via browser automation and play without human input.
 
 - [ ] **Phase 5: Browser Foundation** — Persistent browser session, session health, Discord navigation, and canvas screenshot with vision wire-up
-- [ ] **Phase 6: Turn Detection** — Visual polling to identify when the bot is the active player
+- [x] **Phase 6: Turn Detection** — Visual polling to identify when the bot is the active player (completed 2026-03-26)
 - [ ] **Phase 7: Tile Placement** — Pixel coordinate calibration and tile/board click mechanics
 - [ ] **Phase 8: Autonomous Game Loop** — Full end-to-end play loop with slash commands, resilience, and status reporting
 
@@ -111,6 +111,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Vision Pipeline | v1.1 | 2/2 | Complete | 2026-03-24 |
 | 4. Discord Advisor Mode | v1.1 | 2/2 | Complete | 2026-03-25 |
 | 5. Browser Foundation | 1/2 | In Progress|  | - |
-| 6. Turn Detection | 1/2 | In Progress|  | - |
+| 6. Turn Detection | 1/2 | Complete    | 2026-03-26 | - |
 | 7. Tile Placement | v1.2 | 0/? | Not started | - |
 | 8. Autonomous Game Loop | v1.2 | 0/? | Not started | - |

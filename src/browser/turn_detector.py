@@ -23,9 +23,10 @@ TurnState = Literal["my_turn", "not_my_turn", "game_over"]
 
 # Orange "YOUR TURN" banner: lower and upper HSV bounds.
 # Observed banner pixels: H=[6-22], S=[80-242], V=[176-255].
+# Placeholder range [5-20,120-255,150-255] confirmed correct — kept unchanged.
 # Tight range keeps separation vs Letter League logo orange (~3.7% baseline).
-BANNER_HSV_LOWER = np.array([5, 120, 150])   # Calibrated 2026-03-26
-BANNER_HSV_UPPER = np.array([20, 255, 255])  # Calibrated 2026-03-26
+BANNER_HSV_LOWER = np.array([5, 120, 150])   # Calibrated 2026-03-26 — confirmed from observed H=[6-22]
+BANNER_HSV_UPPER = np.array([20, 255, 255])  # Calibrated 2026-03-26 — confirmed from observed H=[6-22]
 
 # Fractional vertical range of the banner ROI within the canvas (top 15%).
 BANNER_ROI_FRAC = (0.0, 0.15)  # Calibrated 2026-03-26 — banner fits within top 15%

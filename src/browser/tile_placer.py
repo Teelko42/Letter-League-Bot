@@ -9,6 +9,7 @@ import numpy as np
 from loguru import logger
 
 from src.browser.capture import capture_canvas
+from src.browser.turn_detector import classify_frame
 
 if TYPE_CHECKING:
     from src.engine.models import Move, TileUse
@@ -29,6 +30,12 @@ RACK_X0_FRAC = 0.15       # first rack tile center (fraction of canvas width)
 RACK_TILE_STEP_FRAC = 0.035  # spacing between rack tile centers (fraction of width)
 CONFIRM_X_FRAC = 0.87     # confirm button center X (fraction of canvas width)
 CONFIRM_Y_FRAC = 0.95     # confirm button center Y (fraction of canvas height)
+
+MAX_WORD_RETRIES = 3        # max different words to try before tile swap
+RECALL_X_FRAC = 0.13        # PLACEHOLDER — recall/undo button X (fraction of canvas width)
+RECALL_Y_FRAC = 0.95        # PLACEHOLDER — recall/undo button Y (fraction of canvas height)
+SWAP_X_FRAC = 0.50          # PLACEHOLDER — tile swap button X (fraction of canvas width)
+SWAP_Y_FRAC = 0.95          # PLACEHOLDER — tile swap button Y (fraction of canvas height)
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +113,32 @@ class CoordMapper:
         """
         x = self._bbox["x"] + CONFIRM_X_FRAC * self._bbox["width"]
         y = self._bbox["y"] + CONFIRM_Y_FRAC * self._bbox["height"]
+        return x, y
+
+    def recall_btn_px(self) -> tuple[float, float]:
+        """Return viewport pixel coordinates for the recall/undo button.
+
+        Clicking this button clears placed tiles from the board back to the
+        rack, allowing the bot to retry with a different word.
+
+        Returns:
+            ``(x, y)`` viewport pixel coordinates.
+        """
+        x = self._bbox["x"] + RECALL_X_FRAC * self._bbox["width"]
+        y = self._bbox["y"] + RECALL_Y_FRAC * self._bbox["height"]
+        return x, y
+
+    def swap_btn_px(self) -> tuple[float, float]:
+        """Return viewport pixel coordinates for the tile swap button.
+
+        Clicking this button performs a tile swap when no valid words can be
+        placed. Used as a final fallback after MAX_WORD_RETRIES attempts.
+
+        Returns:
+            ``(x, y)`` viewport pixel coordinates.
+        """
+        x = self._bbox["x"] + SWAP_X_FRAC * self._bbox["width"]
+        y = self._bbox["y"] + SWAP_Y_FRAC * self._bbox["height"]
         return x, y
 
 
@@ -384,3 +417,162 @@ class TilePlacer:
                 delay = random.uniform(1.0, 3.0)
                 logger.debug("Inter-tile delay: {:.2f}s", delay)
                 await asyncio.sleep(delay)
+
+    async def _click_confirm(self, mapper: CoordMapper) -> None:
+        """Click the confirm button with jitter to submit the placed word.
+
+        Uses ``page.mouse.click`` (teleport, not drag) as confirm is a simple
+        button click rather than a drag-and-drop interaction.
+
+        Args:
+            mapper: ``CoordMapper`` instance for current canvas dimensions.
+        """
+        cx, cy = jitter(*mapper.confirm_btn_px())
+        logger.info("Clicking confirm button at ({:.1f}, {:.1f})", cx, cy)
+        await self._page.mouse.click(cx, cy)
+
+    async def _wait_for_acceptance(self) -> bool:
+        """Wait 1-2 seconds then check if the word was accepted by the game.
+
+        Captures a fresh screenshot and calls ``classify_frame()`` to determine
+        the current turn state. If the state is not ``"my_turn"``, the bot's
+        turn has ended (word was accepted or the game moved on).
+
+        Returns:
+            ``True`` if the word was accepted (turn ended).
+            ``False`` if still ``"my_turn"`` (word was rejected by the game).
+        """
+        delay = random.uniform(1.0, 2.0)
+        logger.debug("Waiting {:.2f}s for server to process word submission", delay)
+        await asyncio.sleep(delay)
+
+        img_bytes = await capture_canvas(self._page)
+        state = classify_frame(img_bytes)
+        logger.debug("Post-confirm turn state: {}", state)
+        return state != "my_turn"
+
+    async def _recall_tiles(self, mapper: CoordMapper) -> None:
+        """Click the recall/undo button to return placed tiles to the rack.
+
+        Called after a word rejection so the bot can try a different word.
+        Waits briefly after clicking for the animation to complete.
+
+        Args:
+            mapper: ``CoordMapper`` instance for current canvas dimensions.
+        """
+        rx, ry = jitter(*mapper.recall_btn_px())
+        logger.info("Clicking recall button at ({:.1f}, {:.1f}) to clear placed tiles", rx, ry)
+        await self._page.mouse.click(rx, ry)
+        await asyncio.sleep(random.uniform(0.5, 1.0))
+
+    async def _tile_swap(self, mapper: CoordMapper) -> None:
+        """Click the tile swap button as a fallback when no valid words can be placed.
+
+        Used after MAX_WORD_RETRIES word attempts have all been rejected. Logs
+        a warning since tile swap sacrifices a turn.
+
+        Args:
+            mapper: ``CoordMapper`` instance for current canvas dimensions.
+        """
+        sx, sy = jitter(*mapper.swap_btn_px())
+        logger.warning(
+            "Falling back to tile swap at ({:.1f}, {:.1f}) — no valid words accepted after {} attempts",
+            sx,
+            sy,
+            MAX_WORD_RETRIES,
+        )
+        await self._page.mouse.click(sx, sy)
+
+    async def place_move(self, moves: list[Move], rack: list[str]) -> bool:
+        """Orchestrate the full tile placement + confirmation flow.
+
+        Iterates through up to ``MAX_WORD_RETRIES`` candidate moves (sorted
+        best-first by the caller). For each move:
+
+        1. Drag tiles onto the board via ``place_tiles()``.
+        2. Click the confirm button.
+        3. Wait 1-2 seconds and check acceptance via ``classify_frame()``.
+        4. If accepted: log success and return ``True``.
+        5. If rejected: log rejection, recall tiles, try the next move.
+
+        If all word attempts are exhausted without acceptance, performs a tile
+        swap as a last resort and returns ``False``.
+
+        PlacementError exceptions raised during ``place_tiles()`` are caught
+        per-move — the bot logs the error, attempts recall, and continues to
+        the next candidate move. If the final attempt also fails with
+        PlacementError, execution falls through to tile swap.
+
+        Args:
+            moves: Candidate ``Move`` objects sorted by score descending (best
+                first). Typically from ``find_all_moves()`` or a ranked subset.
+                This method does not call the engine — the caller provides the
+                list.
+            rack: Current rack as a list of letter strings (``'?'`` for blank).
+
+        Returns:
+            ``True`` if a word was accepted; ``False`` if tile swap was used.
+        """
+        attempt_limit = min(len(moves), MAX_WORD_RETRIES)
+
+        for attempt_num, move in enumerate(moves[:attempt_limit], start=1):
+            logger.info(
+                "Word attempt {}/{}: '{}' (score={})",
+                attempt_num,
+                attempt_limit,
+                move.word,
+                move.score,
+            )
+
+            try:
+                await self.place_tiles(move, rack)
+            except PlacementError as exc:
+                logger.error(
+                    "PlacementError during tile drag for '{}' (attempt {}): {}",
+                    move.word,
+                    attempt_num,
+                    exc,
+                )
+                # Attempt recall before moving on to next word.
+                try:
+                    bbox = await self._get_canvas_bbox()
+                    mapper = CoordMapper(bbox)
+                    await self._recall_tiles(mapper)
+                except Exception as recall_exc:
+                    logger.warning("Recall after PlacementError also failed: {}", recall_exc)
+                continue
+
+            # Tiles placed — click confirm and wait for server response.
+            bbox = await self._get_canvas_bbox()
+            mapper = CoordMapper(bbox)
+            await self._click_confirm(mapper)
+
+            accepted = await self._wait_for_acceptance()
+
+            if accepted:
+                logger.info(
+                    "Word '{}' accepted! (score={}, attempt {}/{})",
+                    move.word,
+                    move.score,
+                    attempt_num,
+                    attempt_limit,
+                )
+                return True
+
+            logger.info(
+                "Word '{}' rejected (attempt {}/{}) — recalling tiles",
+                move.word,
+                attempt_num,
+                attempt_limit,
+            )
+            await self._recall_tiles(mapper)
+
+        # All word attempts exhausted — fall back to tile swap.
+        logger.warning(
+            "All {} word attempt(s) failed — performing tile swap fallback",
+            attempt_limit,
+        )
+        bbox = await self._get_canvas_bbox()
+        mapper = CoordMapper(bbox)
+        await self._tile_swap(mapper)
+        return False

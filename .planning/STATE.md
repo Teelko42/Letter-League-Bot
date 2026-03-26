@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Browser Automation + Autonomous Play
 status: unknown
-last_updated: "2026-03-26T17:54:04Z"
+last_updated: "2026-03-26T17:58:33Z"
 progress:
   total_phases: 2
   completed_phases: 2
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Analyze a Letter League board state and find the best possible word placement
-**Current focus:** Phase 7 — Tile Placement (plan 1 of 2 complete)
+**Current focus:** Phase 7 — Tile Placement COMPLETE; Phase 8 — Orchestration is next
 
 ## Current Position
 
 Phase: 7 of 8 (Tile Placement)
-Plan: 1 of 2 complete
-Status: In progress
-Last activity: 2026-03-26 — 07-01 CoordMapper, TilePlacer, and calibration script built
+Plan: 2 of 2 complete
+Status: Phase 7 complete — ready for Phase 8
+Last activity: 2026-03-26 — 07-02 confirmation, retry loop, acceptance detection, tile swap built
 
-Progress: [██████░░░░] 60% (phases 1-6 complete; phase 7 plan 1 done)
+Progress: [███████░░░] 70% (phases 1-7 complete)
 
 ## Performance Metrics
 
@@ -51,7 +51,7 @@ Progress: [██████░░░░] 60% (phases 1-6 complete; phase 7 pla
 | 4. Discord Advisor Mode | 2 | ~8 min | ~4 min |
 | 5. Browser Foundation | 3/3 | ~8 min | ~2.7 min |
 | 6. Turn Detection | 1/2 | ~2 min | ~2 min |
-| 7. Tile Placement | 1/2 | ~3 min | ~3 min |
+| 7. Tile Placement | 2/2 | ~5 min | ~2.5 min |
 
 **Recent Trend:**
 - Last 4 plans: ~3 min, ~3 min, ~4 min, ~4 min
@@ -84,6 +84,10 @@ v1.2 decisions so far:
 - Pixel-diff threshold 1.0 MAE chosen for placement verification (conservative; catches any tile landing)
 - One retry on placement failure before raising PlacementError — keeps automation moving
 - Rack tiles sorted by col (H) or row (V) before dragging — ensures word spells in board-natural order
+- place_move() receives list[Move] sorted best-first from caller — no engine coupling inside TilePlacer
+- Acceptance check reuses classify_frame() from Phase 6 — any state != my_turn means turn ended
+- MAX_WORD_RETRIES=3 before tile swap — balances retry cost vs turn loss
+- PlacementError caught per-attempt in place_move(): recall attempted, continue; final fallback is tile swap
 
 ### Pending Todos
 
@@ -99,5 +103,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-26
-Stopped at: Completed 07-01-PLAN.md — CoordMapper, TilePlacer, calibrate_placement.py built; Plan 02 adds confirmation + rejection recovery
+Stopped at: Completed 07-02-PLAN.md — place_move() confirmation, acceptance detection, retry loop, tile swap built; Phase 7 fully complete
 Resume file: None

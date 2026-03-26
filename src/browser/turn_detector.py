@@ -18,21 +18,25 @@ from src.vision.preprocessor import BOARD_HSV_LOWER, BOARD_HSV_UPPER
 TurnState = Literal["my_turn", "not_my_turn", "game_over"]
 
 # ---------------------------------------------------------------------------
-# HSV constants — PLACEHOLDER — calibrate from live screenshots
+# HSV constants — Calibrated from live screenshots 2026-03-26
 # ---------------------------------------------------------------------------
 
 # Orange "YOUR TURN" banner: lower and upper HSV bounds.
-BANNER_HSV_LOWER = np.array([5, 120, 150])   # PLACEHOLDER — calibrate from live screenshots
-BANNER_HSV_UPPER = np.array([20, 255, 255])  # PLACEHOLDER — calibrate from live screenshots
+# Observed banner pixels: H=[6-22], S=[80-242], V=[176-255].
+# Tight range keeps separation vs Letter League logo orange (~3.7% baseline).
+BANNER_HSV_LOWER = np.array([5, 120, 150])   # Calibrated 2026-03-26
+BANNER_HSV_UPPER = np.array([20, 255, 255])  # Calibrated 2026-03-26
 
 # Fractional vertical range of the banner ROI within the canvas (top 15%).
-BANNER_ROI_FRAC = (0.0, 0.15)  # PLACEHOLDER — calibrate from live screenshots
+BANNER_ROI_FRAC = (0.0, 0.15)  # Calibrated 2026-03-26 — banner fits within top 15%
 
 # Minimum ratio of orange pixels in the ROI required to declare "my turn".
-BANNER_CONFIDENCE = 0.10  # PLACEHOLDER — calibrate from live screenshots
+# my_turn: ~9-10% orange | not_my_turn: ~3.7% (logo only) | threshold at 7%.
+BANNER_CONFIDENCE = 0.07  # Calibrated 2026-03-26
 
 # Peach ratio in the centre region below which we suspect game-over.
-GAME_OVER_BOARD_THRESHOLD = 0.02  # PLACEHOLDER — calibrate from live screenshots
+# Gameplay: ~57-60% peach | Game-over overlay: ~12% peach | threshold at 25%.
+GAME_OVER_BOARD_THRESHOLD = 0.25  # Calibrated 2026-03-26
 
 # Polling intervals (seconds).
 POLL_FAST_S = 1.5   # Fast interval during active gameplay.
@@ -114,8 +118,6 @@ def _is_game_over(img_bytes: bytes) -> bool:
 
     Also returns True when: no orange banner is present AND the centre has
     minimal peach colour (i.e. it is not a normal "not my turn" frame).
-
-    NOTE: Exact thresholds will be calibrated in Plan 02 from live screenshots.
 
     Args:
         img_bytes: Raw screenshot bytes from capture_canvas().

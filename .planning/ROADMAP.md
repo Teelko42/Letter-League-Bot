@@ -84,7 +84,9 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
   2. Board cell pixel coordinates are computed the same way, and the coordinate map is recalculated whenever the vision output reports a board dimension change
   3. Clicking a 5-letter word sequence moves the correct tiles from the rack to the correct board cells as confirmed by visual inspection of the game canvas after each click
   4. The play confirmation click dismisses the confirmation UI and the word is accepted by the game (tiles remain on board, score updates)
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 07-01-PLAN.md — Coordinate mapping and tile drag logic (CoordMapper, TilePlacer.place_tiles, calibration script)
+- [ ] 07-02-PLAN.md — Play confirmation, rejection recovery, and retry loop (confirm click, acceptance detection, tile swap fallback)
 
 ### Phase 8: Autonomous Game Loop
 **Goal**: A `/autoplay start` command launches a self-sustaining turn loop that reads the board, selects a move, places tiles, and posts a status update — all concurrent with discord.py — and can be stopped cleanly with `/autoplay stop`
@@ -112,5 +114,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 4. Discord Advisor Mode | v1.1 | 2/2 | Complete | 2026-03-25 |
 | 5. Browser Foundation | 1/2 | In Progress|  | - |
 | 6. Turn Detection | 1/2 | Complete    | 2026-03-26 | - |
-| 7. Tile Placement | v1.2 | 0/? | Not started | - |
+| 7. Tile Placement | v1.2 | 0/2 | Not started | - |
 | 8. Autonomous Game Loop | v1.2 | 0/? | Not started | - |

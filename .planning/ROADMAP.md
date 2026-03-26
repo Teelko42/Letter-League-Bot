@@ -71,7 +71,9 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
   1. Turn-detection signal is documented from live gameplay observation (at least 2 full games watched, specific UI element or pixel region identified and recorded with DevTools screenshots)
   2. `_is_my_turn(screenshot_bytes)` correctly classifies "my turn" vs "not my turn" for at least 10 recorded game screenshots with zero false positives
   3. The polling loop skips the play pipeline and waits when it is not the bot's turn, confirmed by running a session where the bot observes several opponent turns without acting
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 06-01-PLAN.md — Turn detection module + calibration tooling (TurnState, classify_frame, poll_turn, preflight_check, calibration script)
+- [ ] 06-02-PLAN.md — Live calibration and threshold verification (run calibration during game, update HSV constants, verify accuracy)
 
 ### Phase 7: Tile Placement
 **Goal**: The bot translates a chosen word move into a sequence of pixel clicks that correctly places tiles on the board and submits the play via the game UI
@@ -109,6 +111,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 3. Vision Pipeline | v1.1 | 2/2 | Complete | 2026-03-24 |
 | 4. Discord Advisor Mode | v1.1 | 2/2 | Complete | 2026-03-25 |
 | 5. Browser Foundation | 1/2 | In Progress|  | - |
-| 6. Turn Detection | v1.2 | 0/? | Not started | - |
+| 6. Turn Detection | v1.2 | 0/2 | Planned | - |
 | 7. Tile Placement | v1.2 | 0/? | Not started | - |
 | 8. Autonomous Game Loop | v1.2 | 0/? | Not started | - |

@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Browser Automation + Autonomous Play
 status: unknown
-last_updated: "2026-03-26T06:01:56.209Z"
+last_updated: "2026-03-26T17:54:04Z"
 progress:
   total_phases: 2
   completed_phases: 2
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-25)
 
 **Core value:** Analyze a Letter League board state and find the best possible word placement
-**Current focus:** Phase 6 — Turn Detection (plan 1 of 2 complete)
+**Current focus:** Phase 7 — Tile Placement (plan 1 of 2 complete)
 
 ## Current Position
 
-Phase: 6 of 8 (Turn Detection)
+Phase: 7 of 8 (Tile Placement)
 Plan: 1 of 2 complete
 Status: In progress
-Last activity: 2026-03-26 — 06-01 Turn detector module + calibration script built
+Last activity: 2026-03-26 — 07-01 CoordMapper, TilePlacer, and calibration script built
 
-Progress: [█████░░░░░] 50% (phases 1-5 complete; phase 6 plan 1 done)
+Progress: [██████░░░░] 60% (phases 1-6 complete; phase 7 plan 1 done)
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Progress: [█████░░░░░] 50% (phases 1-5 complete; phase 6 pla
 | 4. Discord Advisor Mode | 2 | ~8 min | ~4 min |
 | 5. Browser Foundation | 3/3 | ~8 min | ~2.7 min |
 | 6. Turn Detection | 1/2 | ~2 min | ~2 min |
+| 7. Tile Placement | 1/2 | ~3 min | ~3 min |
 
 **Recent Trend:**
 - Last 4 plans: ~3 min, ~3 min, ~4 min, ~4 min
@@ -79,6 +80,10 @@ v1.2 decisions so far:
 - Quiet logging pattern: only log on turn state-change transitions, not every poll cycle
 - Fractional ROI constants (BANNER_ROI_FRAC) rather than absolute pixel coordinates — resolution-independent
 - All HSV turn-detection constants are placeholders; Plan 02 calibrates from live screenshots
+- All tile-placement fractional constants expressed as FRAC fractions of canvas bbox; operator calibrates once via calibrate_placement.py
+- Pixel-diff threshold 1.0 MAE chosen for placement verification (conservative; catches any tile landing)
+- One retry on placement failure before raising PlacementError — keeps automation moving
+- Rack tiles sorted by col (H) or row (V) before dragging — ensures word spells in board-natural order
 
 ### Pending Todos
 
@@ -94,5 +99,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-03-26
-Stopped at: Completed 06-01-PLAN.md — turn detector + calibration script done; Plan 02 calibrates HSV constants from live gameplay
+Stopped at: Completed 07-01-PLAN.md — CoordMapper, TilePlacer, calibrate_placement.py built; Plan 02 adds confirmation + rejection recovery
 Resume file: None

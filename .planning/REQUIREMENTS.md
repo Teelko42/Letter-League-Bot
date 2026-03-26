@@ -25,8 +25,8 @@ Requirements for milestone v1.2: Browser Automation + Autonomous Play. Each maps
 
 ### Tile Placement
 
-- [ ] **TILE-01**: Bot computes pixel coordinates for board cells and rack tiles from canvas bounding box
-- [ ] **TILE-02**: Bot clicks rack tiles and board cells to place a chosen word move
+- [x] **TILE-01**: Bot computes pixel coordinates for board cells and rack tiles from canvas bounding box
+- [x] **TILE-02**: Bot clicks rack tiles and board cells to place a chosen word move
 - [ ] **TILE-03**: Bot confirms word placement via the game's UI confirmation mechanism
 
 ### Game Loop
@@ -80,8 +80,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ANAV-02 | Phase 5 | Pending |
 | ANAV-03 | Phase 5 | Pending |
 | TURN-01 | Phase 6 | Complete |
-| TILE-01 | Phase 7 | Pending |
-| TILE-02 | Phase 7 | Pending |
+| TILE-01 | Phase 7 | Complete |
+| TILE-02 | Phase 7 | Complete |
 | TILE-03 | Phase 7 | Pending |
 | LOOP-01 | Phase 8 | Pending |
 | LOOP-02 | Phase 8 | Pending |

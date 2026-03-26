@@ -30,8 +30,8 @@ async def main() -> None:
     session = BrowserSession()
     try:
         page = await session.start()
-        frame = await navigate_to_activity(page, channel_url)
-        screenshot = await capture_canvas(page, frame)
+        await navigate_to_activity(page, channel_url)
+        screenshot = await capture_canvas(page)
 
         # Full vision pipeline validation (locked decision — not just non-blank)
         board, rack = await extract_board_state(screenshot)

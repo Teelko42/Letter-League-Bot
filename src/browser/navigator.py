@@ -71,31 +71,60 @@ async def _run_navigation(page: Any, channel_url: str) -> Any:
     logger.info("Navigated to channel: {}", channel_url)
 
     # ------------------------------------------------------------------
-    # Step 2: Join the voice channel if a Join Voice button is visible
+    # Step 2a: Dismiss any blocking modals (e.g. "How'd the call go?")
+    # ------------------------------------------------------------------
+    await asyncio.sleep(2)  # let page settle
+    await page.keyboard.press("Escape")
+    await asyncio.sleep(0.5)
+
+    # ------------------------------------------------------------------
+    # Step 2b: Join the voice channel if a Join Voice button is visible
     # ------------------------------------------------------------------
     join_btn = page.locator('button:has-text("Join Voice")')
-    if await join_btn.count() > 0:
+    try:
+        await join_btn.wait_for(state="visible", timeout=10_000)
         logger.info("Join Voice button found — clicking to join voice channel")
         await join_btn.click()
-        await asyncio.sleep(2)  # Wait for voice panel to appear
-    else:
-        logger.info("Already in voice channel or no Join Voice button found")
+        await asyncio.sleep(3)  # Wait for voice UI to fully load
+    except Exception:
+        logger.info("No Join Voice button — assuming already in voice channel")
 
     # ------------------------------------------------------------------
     # Step 3: Click the Activity shelf rocket button
     # ------------------------------------------------------------------
-    activity_btn = page.locator('button[aria-label="Start an Activity"]')
-    await activity_btn.wait_for(state="visible", timeout=10_000)
+    activity_btn = page.locator('button[aria-label="Start An Activity"]')
+    await activity_btn.wait_for(state="visible", timeout=15_000)
     await activity_btn.click()
     logger.info("Opened Activity shelf")
 
     # ------------------------------------------------------------------
-    # Step 4: Select Letter League from the Activity shelf
+    # Step 4: Launch Letter League (or detect already running)
     # ------------------------------------------------------------------
-    letter_league_btn = page.get_by_text("Letter League", exact=False).first
-    await letter_league_btn.wait_for(state="visible", timeout=10_000)
-    await letter_league_btn.click()
-    logger.info("Launched Letter League activity")
+    # Check if the Activity iframe is already present (game in progress)
+    for f in page.frames:
+        if re.search(r"discordsays\.com", f.url):
+            logger.info("Activity iframe already present — skipping launch")
+            return f
+
+    await asyncio.sleep(1)  # let shelf animate in
+    search_input = page.locator('input[placeholder="Search"]')
+    await search_input.wait_for(state="visible", timeout=10_000)
+    await search_input.fill("Letter League")
+    await asyncio.sleep(1)  # wait for search results
+
+    # Click the first search result that matches
+    result = page.locator('text="Letter League"').first
+    await result.click(force=True, timeout=10_000)
+    logger.info("Selected Letter League from shelf")
+
+    # Click the "Play" button if it appears (not shown when game already exists)
+    play_btn = page.locator('button:has-text("Play")')
+    try:
+        await play_btn.wait_for(state="visible", timeout=5_000)
+        await play_btn.click()
+        logger.info("Clicked Play — launching activity")
+    except Exception:
+        logger.info("No Play button — game may already be launching")
 
     # ------------------------------------------------------------------
     # Step 5: Wait for the Activity iframe (discordsays.com)

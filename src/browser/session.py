@@ -74,8 +74,9 @@ class BrowserSession:
 
     def _profile_exists(self) -> bool:
         """Return True if the Chrome profile Cookies file exists at profile_dir."""
-        cookies_path = Path(self._profile_dir) / "Default" / "Cookies"
-        return cookies_path.exists()
+        network_cookies = Path(self._profile_dir) / "Default" / "Network" / "Cookies"
+        legacy_cookies = Path(self._profile_dir) / "Default" / "Cookies"
+        return network_cookies.exists() or legacy_cookies.exists()
 
     async def _first_run_login(self, page) -> None:
         """Open Discord login page and wait for the operator to complete login.

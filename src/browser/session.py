@@ -69,7 +69,7 @@ class BrowserSession:
         self._context = await self._pw.chromium.launch_persistent_context(
             user_data_dir=self._profile_dir,
             headless=headless,
-            viewport={"width": 1280, "height": 800},
+            viewport={"width": 1920, "height": 1080},
         )
 
     def _profile_exists(self) -> bool:

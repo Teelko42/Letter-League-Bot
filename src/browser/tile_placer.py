@@ -18,24 +18,25 @@ if TYPE_CHECKING:
 # Fractional constants
 # ---------------------------------------------------------------------------
 # All fractions are relative to canvas width or height.
-# PLACEHOLDER — must be calibrated from live game screenshots using
-# scripts/calibrate_placement.py before automated play will be accurate.
+# Calibrated from live iframe at 1057x768 (viewport 1920x1080, chat hidden) — 2026-03-27.
+# GRID_X0/Y0 point to CENTER of cell(0,0); board_cell_px(r,c) returns cell centers.
+# Grid verified: Model predicts cell positions within 1px across all 15x15 cells.
 
-GRID_X0_FRAC = 0.03       # left edge of board grid (fraction of canvas width)
-GRID_Y0_FRAC = 0.02       # top edge of board grid (fraction of canvas height)
-CELL_W_FRAC = 0.034       # one cell width (fraction of canvas width)
-CELL_H_FRAC = 0.049       # one cell height (fraction of canvas height)
-RACK_Y_FRAC = 0.92        # rack row vertical center (fraction of canvas height)
-RACK_X0_FRAC = 0.15       # first rack tile center (fraction of canvas width)
-RACK_TILE_STEP_FRAC = 0.035  # spacing between rack tile centers (fraction of width)
-CONFIRM_X_FRAC = 0.87     # confirm button center X (fraction of canvas width)
-CONFIRM_Y_FRAC = 0.95     # confirm button center Y (fraction of canvas height)
+GRID_X0_FRAC = 0.085401    # center of cell(0,0) X (fraction of canvas width)
+GRID_Y0_FRAC = 0.057552    # center of cell(0,0) Y (fraction of canvas height)
+CELL_W_FRAC = 0.045913     # one cell width (fraction of canvas width)
+CELL_H_FRAC = 0.063021     # one cell height (fraction of canvas height)
+RACK_Y_FRAC = 0.932836     # rack row vertical center — PLACEHOLDER pending live game
+RACK_X0_FRAC = 0.400781    # first rack tile center — PLACEHOLDER pending live game
+RACK_TILE_STEP_FRAC = 0.032531  # spacing between rack tile centers — PLACEHOLDER
+CONFIRM_X_FRAC = 0.499024  # PLAY button center X — PLACEHOLDER pending live game
+CONFIRM_Y_FRAC = 0.858209  # PLAY button center Y — PLACEHOLDER pending live game
 
 MAX_WORD_RETRIES = 3        # max different words to try before tile swap
-RECALL_X_FRAC = 0.13        # PLACEHOLDER — recall/undo button X (fraction of canvas width)
-RECALL_Y_FRAC = 0.95        # PLACEHOLDER — recall/undo button Y (fraction of canvas height)
-SWAP_X_FRAC = 0.50          # PLACEHOLDER — tile swap button X (fraction of canvas width)
-SWAP_Y_FRAC = 0.95          # PLACEHOLDER — tile swap button Y (fraction of canvas height)
+RECALL_X_FRAC = 0.416396   # SWAP button X — doubles as recall when tiles placed (fraction of canvas width)
+RECALL_Y_FRAC = 0.858209   # SWAP button Y (fraction of canvas height)
+SWAP_X_FRAC = 0.416396     # SWAP button X for tile swap fallback (fraction of canvas width)
+SWAP_Y_FRAC = 0.858209     # SWAP button Y (fraction of canvas height)
 
 
 # ---------------------------------------------------------------------------
@@ -237,20 +238,37 @@ class TilePlacer:
     # ------------------------------------------------------------------
 
     async def _get_canvas_bbox(self) -> dict:
-        """Retrieve the canvas element's bounding box from the iframe.
+        """Retrieve the game element's bounding box from the iframe.
+
+        Tries the ``<canvas>`` element first; falls back to the iframe itself
+        if no canvas is found (some game versions render via DOM, not canvas).
 
         Returns:
             Bounding box dict with keys ``x``, ``y``, ``width``, ``height``.
 
         Raises:
-            PlacementError: If the bounding box is ``None`` (canvas not found).
+            PlacementError: If the bounding box is ``None`` (iframe not found).
         """
+        # Try canvas inside the iframe first.
+        try:
+            bbox = await (
+                self._page
+                .frame_locator('iframe[src*="discordsays.com"]')
+                .locator("canvas")
+                .first
+                .bounding_box(timeout=5_000)
+            )
+            if bbox is not None:
+                return bbox
+        except Exception:
+            pass
+
+        # Fallback: use the iframe element itself.
+        logger.debug("No canvas element found — falling back to iframe bounding box")
         bbox = await (
             self._page
-            .frame_locator('iframe[src*="discordsays.com"]')
-            .locator("canvas")
-            .first
-            .bounding_box()
+            .locator('iframe[src*="discordsays.com"]')
+            .bounding_box(timeout=10_000)
         )
         if bbox is None:
             raise PlacementError(

@@ -93,6 +93,10 @@ class LetterLeagueBot(commands.Bot):
         await self.add_cog(AdvisorCog(self))
         logger.info("AdvisorCog registered")
 
+        from src.bot.autoplay_cog import AutoPlayCog  # local import avoids circular dependency
+        await self.add_cog(AutoPlayCog(self))
+        logger.info("AutoPlayCog registered")
+
         # For dev: sync to test guild instantly. Set DISCORD_TEST_GUILD_ID in .env
         # for fast iteration. Without it, global sync can take up to 1 hour.
         guild_id = os.environ.get("DISCORD_TEST_GUILD_ID")

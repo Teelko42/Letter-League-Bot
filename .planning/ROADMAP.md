@@ -99,7 +99,10 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details.
   4. Bot waits a randomised 1-3 second delay between each action (rack click, board click, confirm click) rather than firing clicks at machine speed
   5. When no valid word moves exist the bot performs a tile swap instead of hanging or erroring
   6. After each successful turn the bot posts a Discord message showing the word played and the points scored
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 08-01-PLAN.md — Autoplay state types and embed builders (LoopState, AutoPlayPhase, turn/swap/gameover embeds)
+- [ ] 08-02-PLAN.md — AutoPlayCog with game loop, reconnection, slash commands, and bot.py registration
 
 ## Progress
 
@@ -115,4 +118,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Browser Foundation | 1/2 | In Progress|  | - |
 | 6. Turn Detection | 1/2 | Complete    | 2026-03-26 | - |
 | 7. Tile Placement | 2/2 | Complete   | 2026-03-26 | - |
-| 8. Autonomous Game Loop | v1.2 | 0/? | Not started | - |
+| 8. Autonomous Game Loop | v1.2 | 0/2 | Not started | - |

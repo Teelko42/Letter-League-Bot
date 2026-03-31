@@ -35,7 +35,7 @@ Requirements for milestone v1.2: Browser Automation + Autonomous Play. Each maps
 - [ ] **LOOP-02**: User can run `/autoplay start`, `/autoplay stop`, and `/autoplay status` slash commands
 - [ ] **LOOP-03**: Bot uses human-like timing jitter (random delays between actions)
 - [ ] **LOOP-04**: Bot falls back to tile swap when no valid moves exist
-- [ ] **LOOP-05**: Bot posts Discord status updates showing what word was played and the score
+- [x] **LOOP-05**: Bot posts Discord status updates showing what word was played and the score
 
 ## v2 Requirements
 
@@ -87,7 +87,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LOOP-02 | Phase 8 | Pending |
 | LOOP-03 | Phase 8 | Pending |
 | LOOP-04 | Phase 8 | Pending |
-| LOOP-05 | Phase 8 | Pending |
+| LOOP-05 | Phase 8 | Complete |
 
 **Coverage:**
 - v1.2 requirements: 15 total

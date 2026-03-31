@@ -118,4 +118,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 | 5. Browser Foundation | 1/2 | In Progress|  | - |
 | 6. Turn Detection | 1/2 | Complete    | 2026-03-26 | - |
 | 7. Tile Placement | 2/2 | Complete   | 2026-03-26 | - |
-| 8. Autonomous Game Loop | v1.2 | 0/2 | Not started | - |
+| 8. Autonomous Game Loop | 1/2 | In Progress|  | - |

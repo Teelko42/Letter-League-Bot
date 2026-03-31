@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Browser Automation + Autonomous Play
 status: unknown
-stopped_at: Phase 8 context gathered
-last_updated: "2026-03-31T21:49:05.842Z"
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-03-31T22:26:54.193Z"
 last_activity: 2026-03-26 — 07-02 confirmation, retry loop, acceptance detection, tile swap built
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 8
+  completed_plans: 7
 ---
 
 ---
@@ -71,6 +71,7 @@ Progress: [███████░░░] 70% (phases 1-7 complete)
 **Recent Trend:**
 - Last 4 plans: ~3 min, ~3 min, ~4 min, ~4 min
 - Trend: Stable
+| Phase 08-autonomous-game-loop P01 | 16 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -103,6 +104,9 @@ v1.2 decisions so far:
 - Acceptance check reuses classify_frame() from Phase 6 — any state != my_turn means turn ended
 - MAX_WORD_RETRIES=3 before tile swap — balances retry cost vs turn loss
 - PlacementError caught per-attempt in place_move(): recall attempted, continue; final fallback is tile swap
+- [Phase 08-autonomous-game-loop]: AutoPlayPhase enum uses string values for readable log output
+- [Phase 08-autonomous-game-loop]: LoopState.start_time uses time.monotonic for reliable session duration measurement
+- [Phase 08-autonomous-game-loop]: Autoplay embed builders live in formatter.py alongside advisor embeds (single embed module)
 
 ### Pending Todos
 
@@ -117,6 +121,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-31T21:49:05.835Z
-Stopped at: Phase 8 context gathered
-Resume file: .planning/phases/08-autonomous-game-loop/08-CONTEXT.md
+Last session: 2026-03-31T22:26:54.188Z
+Stopped at: Completed 08-01-PLAN.md
+Resume file: None

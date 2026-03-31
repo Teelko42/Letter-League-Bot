@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Browser Automation + Autonomous Play
 status: unknown
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-03-31T22:26:54.193Z"
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-03-31T22:34:24.996Z"
 last_activity: 2026-03-26 — 07-02 confirmation, retry loop, acceptance detection, tile swap built
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 ---
@@ -72,6 +72,7 @@ Progress: [███████░░░] 70% (phases 1-7 complete)
 - Last 4 plans: ~3 min, ~3 min, ~4 min, ~4 min
 - Trend: Stable
 | Phase 08-autonomous-game-loop P01 | 16 | 2 tasks | 3 files |
+| Phase 08-autonomous-game-loop P02 | 5 | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -107,6 +108,8 @@ v1.2 decisions so far:
 - [Phase 08-autonomous-game-loop]: AutoPlayPhase enum uses string values for readable log output
 - [Phase 08-autonomous-game-loop]: LoopState.start_time uses time.monotonic for reliable session duration measurement
 - [Phase 08-autonomous-game-loop]: Autoplay embed builders live in formatter.py alongside advisor embeds (single embed module)
+- [Phase 08-autonomous-game-loop]: app_commands.Command wraps slash handlers; tests access command.callback(cog, interaction) for direct invocation
+- [Phase 08-autonomous-game-loop]: RECONNECT_DELAYS=[5,15,30]: three reconnect attempts with increasing backoff before RuntimeError (BROW-03)
 
 ### Pending Todos
 
@@ -121,6 +124,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-31T22:26:54.188Z
-Stopped at: Completed 08-01-PLAN.md
+Last session: 2026-03-31T22:34:24.991Z
+Stopped at: Completed 08-02-PLAN.md
 Resume file: None

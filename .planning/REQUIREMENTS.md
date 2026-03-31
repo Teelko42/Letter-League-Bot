@@ -11,7 +11,7 @@ Requirements for milestone v1.2: Browser Automation + Autonomous Play. Each maps
 
 - [x] **BROW-01**: Bot launches persistent Playwright browser session with saved Discord web login that survives restarts
 - [x] **BROW-02**: Bot detects expired sessions at startup and notifies the operator instead of silently failing
-- [ ] **BROW-03**: Bot reconnects gracefully when the browser session or Activity disconnects mid-game
+- [x] **BROW-03**: Bot reconnects gracefully when the browser session or Activity disconnects mid-game
 
 ### Activity Navigation
 
@@ -31,10 +31,10 @@ Requirements for milestone v1.2: Browser Automation + Autonomous Play. Each maps
 
 ### Game Loop
 
-- [ ] **LOOP-01**: Async game loop runs concurrent with discord.py event loop without blocking
-- [ ] **LOOP-02**: User can run `/autoplay start`, `/autoplay stop`, and `/autoplay status` slash commands
-- [ ] **LOOP-03**: Bot uses human-like timing jitter (random delays between actions)
-- [ ] **LOOP-04**: Bot falls back to tile swap when no valid moves exist
+- [x] **LOOP-01**: Async game loop runs concurrent with discord.py event loop without blocking
+- [x] **LOOP-02**: User can run `/autoplay start`, `/autoplay stop`, and `/autoplay status` slash commands
+- [x] **LOOP-03**: Bot uses human-like timing jitter (random delays between actions)
+- [x] **LOOP-04**: Bot falls back to tile swap when no valid moves exist
 - [x] **LOOP-05**: Bot posts Discord status updates showing what word was played and the score
 
 ## v2 Requirements
@@ -75,7 +75,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | BROW-01 | Phase 5 | Complete |
 | BROW-02 | Phase 5 | Complete |
-| BROW-03 | Phase 8 | Pending |
+| BROW-03 | Phase 8 | Complete |
 | ANAV-01 | Phase 5 | Pending |
 | ANAV-02 | Phase 5 | Pending |
 | ANAV-03 | Phase 5 | Pending |
@@ -83,10 +83,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TILE-01 | Phase 7 | Complete |
 | TILE-02 | Phase 7 | Complete |
 | TILE-03 | Phase 7 | Complete |
-| LOOP-01 | Phase 8 | Pending |
-| LOOP-02 | Phase 8 | Pending |
-| LOOP-03 | Phase 8 | Pending |
-| LOOP-04 | Phase 8 | Pending |
+| LOOP-01 | Phase 8 | Complete |
+| LOOP-02 | Phase 8 | Complete |
+| LOOP-03 | Phase 8 | Complete |
+| LOOP-04 | Phase 8 | Complete |
 | LOOP-05 | Phase 8 | Complete |
 
 **Coverage:**

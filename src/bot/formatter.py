@@ -258,3 +258,63 @@ def build_info_embed(title: str, description: str) -> discord.Embed:
         discord.Embed with blurple color.
     """
     return discord.Embed(title=title, description=description, color=INFO_COLOR)
+
+
+# ---------------------------------------------------------------------------
+# Autoplay embed builders
+# ---------------------------------------------------------------------------
+
+
+def build_turn_embed(move: "Move", turn_count: int) -> discord.Embed:
+    """Build a green embed announcing a word played during autoplay.
+
+    Args:
+        move:        The Move that was just played.
+        turn_count:  Current turn number (1-based).
+
+    Returns:
+        discord.Embed with green color, turn number title, and play details.
+    """
+    direction_word = "across" if move.direction == "H" else "down"
+    description = (
+        f"Played **{move.word}** {direction_word} "
+        f"from ({move.start_row},{move.start_col}) "
+        f"for **{move.score} pts**"
+    )
+    return discord.Embed(
+        title=f"Turn {turn_count}",
+        description=description,
+        color=SUCCESS_COLOR,
+    )
+
+
+def build_swap_embed(turn_count: int) -> discord.Embed:
+    """Build a gold warning embed for a tile swap (no valid moves).
+
+    Args:
+        turn_count:  Current turn number (1-based).
+
+    Returns:
+        discord.Embed with gold color indicating a swap occurred.
+    """
+    return discord.Embed(
+        title=f"Turn {turn_count}",
+        description="Swapped tiles (no valid moves)",
+        color=WARNING_COLOR,
+    )
+
+
+def build_gameover_embed(turn_count: int) -> discord.Embed:
+    """Build a blurple embed announcing the end of an autoplay session.
+
+    Args:
+        turn_count:  Total turns played during the session.
+
+    Returns:
+        discord.Embed with blurple color and session summary.
+    """
+    return discord.Embed(
+        title="Game Over",
+        description=f"The game has ended after **{turn_count}** turns. Autoplay stopped.",
+        color=INFO_COLOR,
+    )

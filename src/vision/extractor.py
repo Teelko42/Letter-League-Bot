@@ -10,25 +10,50 @@ from loguru import logger
 from src.vision.errors import EXTRACTION_FAILED, VisNError
 from src.vision.schema import BOARD_SCHEMA
 
-# Module-level async client — reads ANTHROPIC_API_KEY from environment by default.
-client = anthropic.AsyncAnthropic()
+# Lazy-initialised async client.  Created on first API call so that
+# load_dotenv() has already populated ANTHROPIC_API_KEY in the environment.
+_client: anthropic.AsyncAnthropic | None = None
+
+
+def _get_client() -> anthropic.AsyncAnthropic:
+    global _client
+    if _client is None:
+        _client = anthropic.AsyncAnthropic()
+    return _client
 
 # Prompt sent to Claude Vision for board state extraction.
-# The prompt anchors Claude to the exact 19x27 grid coordinate system and
+# The prompt anchors Claude to the exact 19x27 grid coordinate system,
+# provides landmark reference points for position calibration, and
 # instructs it to return only occupied cells plus the player's tile rack.
 EXTRACTION_PROMPT = (
     "You are analyzing a Letter League game board screenshot.\n"
     "\n"
+    "BOARD LAYOUT:\n"
     "The board is exactly 19 rows by 27 columns (0-indexed):\n"
     "  - Row 0 is the top row, row 18 is the bottom row.\n"
     "  - Column 0 is the leftmost column, column 26 is the rightmost column.\n"
     "  - Columns increase left-to-right; rows increase top-to-bottom.\n"
+    "  - The center of the board (marked with a star) is at row 9, column 13.\n"
     "\n"
-    "When mapping tiles to coordinates, carefully count the grid lines and "
-    "borders in the image to determine accurate (row, col) positions. "
-    "Do not guess — count methodically from the top-left corner.\n"
+    "REFERENCE LANDMARKS — use these to calibrate your position counting:\n"
+    "  - Center star: (9, 13) — the middle of the board.\n"
+    "  - Triple Word squares (TW, red/dark red): ONLY at (3,7), (3,19), (15,7), (15,19).\n"
+    "  - The board is symmetric around the center.\n"
+    "  - Multiplier squares are colored: blue=DL, green=DW, orange=TL, red=TW.\n"
     "\n"
-    "Extract the following:\n"
+    "REFERENCE MARKERS ON THE IMAGE:\n"
+    "  Small colored dots with coordinate labels have been placed at:\n"
+    "  - Green dot: center star at (9,13)\n"
+    "  - Red dots: the four TW squares at (3,7), (3,19), (15,7), (15,19)\n"
+    "  Use these markers to calibrate your position counting.\n"
+    "\n"
+    "COUNTING STRATEGY:\n"
+    "  1. Locate the green center marker at (9,13).\n"
+    "  2. For each tile, count its row and column offset from the center.\n"
+    "  3. Verify: the multiplier color of the square under each tile should\n"
+    "     match what you report. If it doesn't, re-count.\n"
+    "\n"
+    "EXTRACT:\n"
     "\n"
     "1. BOARD CELLS — Only cells that contain a placed tile (skip empty squares).\n"
     "   For each placed tile, record:\n"
@@ -89,7 +114,7 @@ async def call_vision_api(
 
     start = time.monotonic()
     try:
-        response = await client.messages.create(
+        response = await _get_client().messages.create(
             model="claude-sonnet-4-6",
             max_tokens=4096,
             messages=[

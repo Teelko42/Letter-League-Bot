@@ -28,6 +28,26 @@ def validate_extraction(data: dict) -> list[str]:
     rack = data["rack"]
 
     # ------------------------------------------------------------------
+    # Check 0 — Duplicate positions / out-of-bounds coordinates
+    # ------------------------------------------------------------------
+    seen_positions: set[tuple[int, int]] = set()
+    for cell in cells:
+        pos = (cell["row"], cell["col"])
+        if pos in seen_positions:
+            errors.append(
+                f"Duplicate tile at ({cell['row']}, {cell['col']}) — "
+                f"two tiles cannot occupy the same cell"
+            )
+        seen_positions.add(pos)
+
+        # Bounds check: 19 rows (0-18), 27 cols (0-26)
+        if not (0 <= cell["row"] <= 18 and 0 <= cell["col"] <= 26):
+            errors.append(
+                f"Tile '{cell['letter']}' at ({cell['row']}, {cell['col']}) "
+                f"is outside the 19x27 board"
+            )
+
+    # ------------------------------------------------------------------
     # Check 1 — Valid letters (A-Z only)
     # ------------------------------------------------------------------
     for cell in cells:
@@ -68,20 +88,47 @@ def validate_extraction(data: dict) -> list[str]:
                 )
 
     # ------------------------------------------------------------------
-    # Check 3 — Multiplier positions match official layout
+    # Check 3 — Multiplier positions: detect coordinate accuracy issues
     # ------------------------------------------------------------------
+    # Compare vision-reported multipliers against the official layout.
+    # Mismatches on non-NONE squares are a strong signal that the Vision API
+    # miscounted positions. If too many tiles on multiplier squares have
+    # the wrong multiplier, flag it as a position accuracy error.
+    #
+    # The engine uses the official layout regardless, so we auto-correct
+    # after checking.
+    mult_check_total = 0   # tiles where reported OR expected multiplier is non-NONE
+    mult_check_wrong = 0   # tiles where reported != expected among those
+
     for cell in cells:
         row, col = cell["row"], cell["col"]
         expected = OFFICIAL_MULTIPLIER_LAYOUT.get((row, col), "NONE")
-        if cell["multiplier"] != expected:
-            errors.append(
-                f"Multiplier mismatch at ({row}, {col}): "
-                f"got {cell['multiplier']}, expected {expected}"
-            )
+        reported = cell["multiplier"]
+
+        # Only count cells where at least one side is non-NONE (informative)
+        if reported != "NONE" or expected != "NONE":
+            mult_check_total += 1
+            if reported != expected:
+                mult_check_wrong += 1
+
+        if reported != expected:
+            cell["multiplier"] = expected
+
+    # If more than half of informative multiplier checks fail, positions
+    # are likely wrong — report as a validation error to trigger a retry.
+    if mult_check_total >= 2 and mult_check_wrong / mult_check_total > 0.5:
+        errors.append(
+            f"Position accuracy suspect: {mult_check_wrong}/{mult_check_total} "
+            f"multiplier mismatches — tile coordinates may be off. "
+            f"Re-count positions using the center star at (9,13) as reference."
+        )
 
     # ------------------------------------------------------------------
-    # Check 4 — Rack count <= 7 and valid rack tile characters
+    # Check 4 — Rack count (1-7) and valid rack tile characters
     # ------------------------------------------------------------------
+    if len(rack) == 0:
+        errors.append("Rack is empty — the player's tile rack should have at least 1 tile")
+
     if len(rack) > 7:
         errors.append(f"Rack has {len(rack)} tiles (max 7)")
 

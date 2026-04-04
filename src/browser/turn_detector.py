@@ -221,6 +221,9 @@ async def poll_turn(page: Any) -> TurnState:
     - Snaps back to fast polling the moment a state change is detected.
     - Logs only on state transitions (quiet logging per CONTEXT.md decisions).
     - Retries with exponential backoff on capture failures.
+    - Will not return "game_over" until at least one gameplay frame (my_turn or
+      not_my_turn) has been observed, preventing false positives from lobby/loading
+      screens that lack the peach board background.
 
     Args:
         page: A patchright Page object.
@@ -233,6 +236,7 @@ async def poll_turn(page: Any) -> TurnState:
     last_state: TurnState | None = None
     idle_duration: float = 0.0
     capture_backoff: float = 1.0  # Seconds between retry attempts on failure
+    game_seen: bool = False  # True once we've seen my_turn or not_my_turn
 
     while True:
         # --- Capture frame with retry/backoff on failure ---
@@ -249,6 +253,19 @@ async def poll_turn(page: Any) -> TurnState:
 
         # --- Classify the frame ---
         state: TurnState = classify_frame(img_bytes)
+
+        # --- Guard: ignore game_over until we've seen actual gameplay ---
+        if state == "game_over" and not game_seen:
+            # Lobby / loading screen — treat as waiting, keep polling.
+            if last_state != "game_over":
+                logger.info("Turn state: game_over before gameplay detected — treating as loading screen, waiting")
+                last_state = "game_over"
+            idle_duration += POLL_FAST_S
+            await asyncio.sleep(POLL_FAST_S)
+            continue
+
+        if state in ("my_turn", "not_my_turn"):
+            game_seen = True
 
         # --- Log only on state change (quiet logging) ---
         if state != last_state:

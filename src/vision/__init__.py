@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 
 from loguru import logger
@@ -22,6 +23,41 @@ _MULTIPLIER_LAYOUT_ENGINE = {
     pos: MULT_STR_TO_ENGINE[mult_str]
     for pos, mult_str in OFFICIAL_MULTIPLIER_LAYOUT.items()
 }
+
+_FLOATING_RE = re.compile(r"Floating tile '.+' at \((\d+), (\d+)\)")
+
+
+def _log_extracted_state(data: dict) -> None:
+    """Log the extracted board state at DEBUG level for diagnostics."""
+    cells = data.get("board", {}).get("cells", [])
+    rack = data.get("rack", [])
+    if not cells:
+        logger.debug("Vision extracted 0 cells")
+        return
+    # Build a compact representation: (row,col)=LETTER[mult]
+    cell_strs = [
+        f"({c['row']},{c['col']})={c['letter']}"
+        f"{'*' if c.get('is_blank') else ''}"
+        f"[{c.get('multiplier', '?')}]"
+        for c in cells
+    ]
+    logger.debug("Vision extracted cells: {}", " ".join(cell_strs))
+    logger.debug("Vision extracted rack: {}", rack)
+
+
+def _remove_floating_tiles(data: dict, floating_errors: list[str]) -> None:
+    """Remove floating tiles from extraction data so the pipeline can proceed."""
+    coords_to_remove: set[tuple[int, int]] = set()
+    for err in floating_errors:
+        m = _FLOATING_RE.search(err)
+        if m:
+            coords_to_remove.add((int(m.group(1)), int(m.group(2))))
+    if coords_to_remove:
+        data["board"]["cells"] = [
+            c for c in data["board"]["cells"]
+            if (c["row"], c["col"]) not in coords_to_remove
+        ]
+
 
 __all__ = [
     "extract_board_state",
@@ -76,6 +112,7 @@ async def extract_board_state(
     # ------------------------------------------------------------------
     data = await call_vision_api(processed_bytes)
     logger.info("Extraction complete (first attempt)")
+    _log_extracted_state(data)
 
     # ------------------------------------------------------------------
     # Step 3: Validate
@@ -98,16 +135,28 @@ async def extract_board_state(
         )
         data = await call_vision_api(processed_bytes, retry_context=retry_context)
         logger.info("Extraction complete (retry)")
+        _log_extracted_state(data)
         errors = validate_extraction(data)
         logger.info(
             "Validation result after retry — {} error(s)",
             len(errors),
         )
         if errors:
-            raise VisNError(
-                VALIDATION_FAILED,
-                f"Validation failed after retry: {'; '.join(errors)}",
-            )
+            # If the only remaining errors are floating tiles, remove them
+            # and proceed — incomplete data is better than a total failure.
+            floating_errors = [e for e in errors if "Floating tile" in e]
+            non_floating = [e for e in errors if "Floating tile" not in e]
+            if not non_floating and floating_errors:
+                _remove_floating_tiles(data, floating_errors)
+                logger.warning(
+                    "Removed {} floating tile(s) to salvage extraction",
+                    len(floating_errors),
+                )
+            else:
+                raise VisNError(
+                    VALIDATION_FAILED,
+                    f"Validation failed after retry: {'; '.join(errors)}",
+                )
 
     # ------------------------------------------------------------------
     # Step 5: Populate Board

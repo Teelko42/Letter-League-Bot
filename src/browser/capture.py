@@ -38,6 +38,7 @@ def is_non_blank(img_bytes: bytes, threshold: float = 5.0) -> bool:
 async def capture_canvas(
     page: Any,
     max_retries: int = 3,
+    render_wait: bool = True,
 ) -> bytes:
     """Capture a screenshot of the Letter League game from the Activity iframe.
 
@@ -48,6 +49,9 @@ async def capture_canvas(
     Args:
         page: A patchright Page object (typed as Any to avoid import complexity).
         max_retries: Maximum number of blank-screenshot retries.
+        render_wait: If True (default), wait 3 seconds for the game to finish
+            rendering after navigation.  Set to False for fast captures during
+            placement verification where the game is already rendered.
 
     Returns:
         Non-blank PNG screenshot bytes of the game.
@@ -63,7 +67,10 @@ async def capture_canvas(
     except Exception:
         logger.warning("Activity iframe not visible after 30s")
 
-    await asyncio.sleep(3.0)  # Buffer for game render completion
+    if render_wait:
+        await asyncio.sleep(3.0)  # Buffer for game render completion
+    else:
+        await asyncio.sleep(0.3)  # Brief settle time for fast captures
 
     for attempt in range(1, max_retries + 1):
         screenshot_bytes: bytes = await iframe_locator.screenshot(timeout=15_000)

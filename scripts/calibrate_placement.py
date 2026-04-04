@@ -7,37 +7,52 @@ Run with a PNG screenshot captured from a live Letter League game::
     python scripts/calibrate_placement.py path/to/screenshot.png
 
 The script opens the image in an OpenCV window and prompts you to click
-6 reference points in sequence. After all 6 clicks the fractional constants
+8 reference points in sequence. After all 8 clicks the fractional constants
 are computed and printed as a ready-to-paste Python block for tile_placer.py.
+
+The board is 19 rows x 27 columns.  To avoid tiny-cell mis-clicks, cell
+width and height are measured across 10-cell spans and divided.
 
 Reference points (click in this order)
 ---------------------------------------
-1. TOP-LEFT corner of board cell (0,0)
-2. TOP-LEFT corner of board cell (0,1)  — one cell to the right
-3. TOP-LEFT corner of board cell (1,0)  — one cell below (0,0)
-4. CENTER of the first rack tile (slot 0)
-5. CENTER of the second rack tile (slot 1)
-6. CENTER of the confirm button
+1. TOP-LEFT corner of board cell (0,0)   — top-left of the grid
+2. TOP-LEFT corner of board cell (0,10)  — 10 cells to the right
+3. TOP-LEFT corner of board cell (10,0)  — 10 cells below (0,0)
+4. TOP-LEFT corner of board cell (0,26)  — rightmost column (for verification)
+5. TOP-LEFT corner of board cell (18,0)  — bottom row (for verification)
+6. CENTER of the first rack tile (slot 0, leftmost)
+7. CENTER of the second rack tile (slot 1)
+8. CENTER of the confirm button
 """
 
 from __future__ import annotations
 
 import sys
 
-REQUIRED_CLICKS = 6
+REQUIRED_CLICKS = 8
+
+# Number of cells between click 1→2 (width) and click 1→3 (height).
+CELL_SPAN_W = 10
+CELL_SPAN_H = 10
 
 PROMPTS = [
-    "Click 1/6 — TOP-LEFT corner of board cell (0,0)",
-    "Click 2/6 — TOP-LEFT corner of board cell (0,1)  [one cell RIGHT of (0,0)]",
-    "Click 3/6 — TOP-LEFT corner of board cell (1,0)  [one cell BELOW (0,0)]",
-    "Click 4/6 — CENTER of first rack tile (slot 0, leftmost)",
-    "Click 5/6 — CENTER of second rack tile (slot 1)",
-    "Click 6/6 — CENTER of confirm button",
+    "Click 1/8 — TOP-LEFT corner of board cell (0,0)   [top-left of grid]",
+    "Click 2/8 — TOP-LEFT corner of board cell (0,10)   [10 cells RIGHT of (0,0)]",
+    "Click 3/8 — TOP-LEFT corner of board cell (10,0)   [10 cells BELOW (0,0)]",
+    "Click 4/8 — TOP-LEFT corner of board cell (0,26)   [rightmost column, for verification]",
+    "Click 5/8 — TOP-LEFT corner of board cell (18,0)   [bottom row, for verification]",
+    "Click 6/8 — CENTER of first rack tile (slot 0, leftmost)",
+    "Click 7/8 — CENTER of second rack tile (slot 1)",
+    "Click 8/8 — CENTER of confirm button",
 ]
 
 
 def _compute_constants(clicks: list[tuple[int, int]], img_w: int, img_h: int) -> dict[str, float]:
     """Compute fractional constants from recorded click coordinates.
+
+    Cell width is measured across a 10-cell span (clicks 1→2) for precision.
+    Cell height is measured across a 10-cell span (clicks 1→3).
+    Clicks 4 and 5 (rightmost column, bottom row) are used for verification.
 
     Args:
         clicks: List of (x, y) tuples in the order described in PROMPTS.
@@ -47,18 +62,42 @@ def _compute_constants(clicks: list[tuple[int, int]], img_w: int, img_h: int) ->
     Returns:
         Dict mapping constant name to fractional value.
     """
-    (x0, y0), (x1, _y1), (_x2, y2), (x3, y3), (x4, _y4), (x5, y5) = clicks
+    (x0, y0) = clicks[0]   # cell (0,0)
+    (x1, _) = clicks[1]    # cell (0,10)
+    (_, y2) = clicks[2]    # cell (10,0)
+    (x3, _) = clicks[3]    # cell (0,26)  — verification
+    (_, y4) = clicks[4]    # cell (18,0)  — verification
+    (x5, y5) = clicks[5]   # rack slot 0
+    (x6, _) = clicks[6]    # rack slot 1
+    (x7, y7) = clicks[7]   # confirm button
+
+    cell_w = (x1 - x0) / CELL_SPAN_W
+    cell_h = (y2 - y0) / CELL_SPAN_H
+
+    # Verification: compare measured cell size with the full-span measurement.
+    cell_w_verify = (x3 - x0) / 26  # 26 intervals for 27 columns
+    cell_h_verify = (y4 - y0) / 18  # 18 intervals for 19 rows
+
+    print(f"\n  Cell width  — 10-span: {cell_w:.1f}px, full-span: {cell_w_verify:.1f}px "
+          f"(delta: {abs(cell_w - cell_w_verify):.1f}px)")
+    print(f"  Cell height — 10-span: {cell_h:.1f}px, full-span: {cell_h_verify:.1f}px "
+          f"(delta: {abs(cell_h - cell_h_verify):.1f}px)")
+
+    if abs(cell_w - cell_w_verify) > 3:
+        print("  ⚠ WARNING: cell width measurements disagree by >3px — recheck clicks!")
+    if abs(cell_h - cell_h_verify) > 3:
+        print("  ⚠ WARNING: cell height measurements disagree by >3px — recheck clicks!")
 
     return {
         "GRID_X0_FRAC": x0 / img_w,
         "GRID_Y0_FRAC": y0 / img_h,
-        "CELL_W_FRAC": (x1 - x0) / img_w,
-        "CELL_H_FRAC": (y2 - y0) / img_h,
-        "RACK_X0_FRAC": x3 / img_w,
-        "RACK_Y_FRAC": y3 / img_h,
-        "RACK_TILE_STEP_FRAC": (x4 - x3) / img_w,
-        "CONFIRM_X_FRAC": x5 / img_w,
-        "CONFIRM_Y_FRAC": y5 / img_h,
+        "CELL_W_FRAC": cell_w / img_w,
+        "CELL_H_FRAC": cell_h / img_h,
+        "RACK_X0_FRAC": x5 / img_w,
+        "RACK_Y_FRAC": y5 / img_h,
+        "RACK_TILE_STEP_FRAC": (x6 - x5) / img_w,
+        "CONFIRM_X_FRAC": x7 / img_w,
+        "CONFIRM_Y_FRAC": y7 / img_h,
     }
 
 

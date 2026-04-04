@@ -76,6 +76,10 @@ def find_all_moves(
     Returns:
         List of Move objects sorted by score descending.
     """
+    # Normalize blank representation: vision pipeline uses '?' but
+    # LeftPart/ExtendRight check for '_'.
+    rack = ['_' if t == '?' else t for t in rack]
+
     all_moves: list[Move] = []
 
     for direction in ('H', 'V'):
@@ -505,7 +509,11 @@ def _build_move(
             temp_cell = Cell(r, c, letter=letter, is_blank=is_blank)
             board_cell = board.get_cell(r, c)
             temp_cell.square_multiplier = board_cell.square_multiplier
-            temp_cell.bonded_multiplier = board_cell.bonded_multiplier
+            # Simulate wild-mode bonding: newly placed tiles bond the
+            # square's multiplier, but place_tile() is never called for
+            # hypothetical moves.  Use square_multiplier so wild-mode
+            # scoring (which reads bonded_multiplier) applies correctly.
+            temp_cell.bonded_multiplier = board_cell.square_multiplier
             move_cells.append(temp_cell)
             tiles_used.append(TileUse(r, c, letter, is_blank, from_rack=True))
         else:
@@ -577,7 +585,7 @@ def _gather_perpendicular_words(
         temp_cell = Cell(row, col, letter=letter, is_blank=is_blank)
         board_cell = board.get_cell(row, col)
         temp_cell.square_multiplier = board_cell.square_multiplier
-        temp_cell.bonded_multiplier = board_cell.bonded_multiplier
+        temp_cell.bonded_multiplier = board_cell.square_multiplier
 
         perp_cells: list[Cell] = []
 

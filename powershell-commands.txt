@@ -1,0 +1,88 @@
+============================================================
+  LETTER LEAGUE BOT - PowerShell Commands Reference
+============================================================
+
+------------------------------------------------------------
+  ENVIRONMENT SETUP
+------------------------------------------------------------
+
+# Set Python path for module imports (run before any command)
+$env:PYTHONPATH = "."
+
+------------------------------------------------------------
+  PACKAGE INSTALLATION
+------------------------------------------------------------
+
+# Core engine
+pip install pytest
+
+# Difficulty system
+pip install wordfreq==3.1.1
+
+# Vision pipeline
+py -m pip install opencv-python Pillow numpy
+py -m pip install anthropic loguru
+
+# Discord integration
+pip install "discord.py==2.7.1"
+pip install "python-dotenv==1.2.2"
+pip install "loguru==0.7.3"
+
+# Browser automation
+& "C:\Users\Ninja\AppData\Local\Programs\Python\Python310\python.exe" -m pip install patchright
+& "C:\Users\Ninja\AppData\Local\Programs\Python\Python310\python.exe" -m patchright install chromium
+
+# Testing
+py -3 -m pip install pytest-asyncio
+
+------------------------------------------------------------
+  RUNNING THE BOT
+------------------------------------------------------------
+
+# Start the Discord bot
+py -m src.bot.bot
+
+# Start with full Python path
+& "C:\Users\Ninja\AppData\Local\Programs\Python\Python310\python.exe" -m src.bot.bot
+
+------------------------------------------------------------
+  RUNNING TESTS
+------------------------------------------------------------
+
+# Phase 1 - Word Engine
+python -m pytest tests/test_gaddag.py -v
+python -m pytest tests/test_board.py -v
+python -m pytest tests/test_scoring.py -v
+python -m pytest tests/test_moves.py -v
+
+# Phase 2 - Difficulty System
+python -m pytest tests/test_difficulty.py -v
+
+# Phase 3 - Vision Pipeline
+python -m pytest tests/vision/test_preprocessor.py -x -v
+python -m pytest tests/vision/test_validator.py -x -v
+
+# Run all tests
+python -m pytest tests/ -v
+
+------------------------------------------------------------
+  CALIBRATION SCRIPTS
+------------------------------------------------------------
+
+# Turn detection HSV color calibration
+python scripts/calibrate_turn.py
+
+# Tile placement coordinate calibration
+& "C:\Users\Ninja\AppData\Local\Programs\Python\Python310\python.exe" scripts/calibrate_placement.py debug/calibration.png
+
+------------------------------------------------------------
+  BROWSER SESSION TESTING
+------------------------------------------------------------
+
+# Test first-run login flow (headed browser)
+$env:PYTHONPATH = "."
+& "C:\Users\Ninja\AppData\Local\Programs\Python\Python310\python.exe" -c "import asyncio; from src.browser.session import BrowserSession; s = BrowserSession(); asyncio.run(s.start())"
+
+# Full browser pipeline test
+$env:PYTHONPATH = "."
+& "C:\Users\Ninja\AppData\Local\Programs\Python\Python310\python.exe" scripts/browser_test.py

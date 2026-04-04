@@ -288,16 +288,18 @@ class Board:
             c = anchor_col - 1
             while c >= 0 and count < cap:
                 if self.grid[anchor_row][c].letter is not None:
-                    # Hit an occupied cell — no room at all
-                    return 0
+                    # Hit an occupied cell — stop scanning but return
+                    # the empty cells found so far. Words placed in the
+                    # gap won't include the distant tile (non-contiguous),
+                    # and _build_move validates the resulting word.
+                    break
                 count += 1
                 c -= 1
         else:  # direction == 'V'
             r = anchor_row - 1
             while r >= 0 and count < cap:
                 if self.grid[r][anchor_col].letter is not None:
-                    # Hit an occupied cell — no room at all
-                    return 0
+                    break
                 count += 1
                 r -= 1
 

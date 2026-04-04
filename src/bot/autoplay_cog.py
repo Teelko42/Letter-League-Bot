@@ -242,7 +242,12 @@ class AutoPlayCog(commands.Cog):
                         moves,
                         ch_state.difficulty,
                     )
+                    # Build candidate list: primary selection + backup moves
+                    # so place_move can try alternates if placement fails.
                     candidates: list = [selected]
+                    for m in moves:
+                        if m is not selected and len(candidates) < 5:
+                            candidates.append(m)
                 else:
                     candidates = []
 

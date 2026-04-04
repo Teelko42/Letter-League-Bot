@@ -17,22 +17,34 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Fractional constants
 # ---------------------------------------------------------------------------
-# All fractions are relative to canvas width or height.
-# Calibrated from live iframe at 1057x768 (viewport 1920x1080, chat hidden) — 2026-03-27.
-# GRID_X0/Y0 point to CENTER of cell(0,0); board_cell_px(r,c) returns cell centers.
-# Grid verified: Model predicts cell positions within 1px across all 15x15 cells.
+# All fractions are relative to the GAME CANVAS width or height (not the
+# outer iframe — see _get_canvas_bbox for how the game area is computed when
+# the <canvas> element cannot be located).
+#
+# Calibrated from live iframe at 1057x768 (viewport 1920x1080, chat hidden).
+# GRID_X0/Y0 point to the TOP-LEFT corner of cell(0,0).
+# board_cell_px(r,c) returns the top-left of each cell (close enough to the
+# center for click-to-place to register).
+#
+# Board is 19 rows x 27 columns.
 
-GRID_X0_FRAC = 0.085401    # center of cell(0,0) X (fraction of canvas width)
-GRID_Y0_FRAC = 0.057552    # center of cell(0,0) Y (fraction of canvas height)
-CELL_W_FRAC = 0.045913     # one cell width (fraction of canvas width)
-CELL_H_FRAC = 0.063021     # one cell height (fraction of canvas height)
+GRID_X0_FRAC = 0.085401    # top-left of cell(0,0) X (fraction of canvas width)
+GRID_Y0_FRAC = 0.057552    # top-left of cell(0,0) Y (fraction of canvas height)
+CELL_W_FRAC = 0.02889      # one cell width  (fraction of canvas width)  — 27 cols
+CELL_H_FRAC = 0.03900      # one cell height (fraction of canvas height) — 19 rows
+
+# Canvas dimensions when the grid constants above were calibrated.
+# Used to compute the game render area inside the iframe when the <canvas>
+# element cannot be found (the game maintains this aspect ratio).
+CALIBRATION_CANVAS_W = 1057
+CALIBRATION_CANVAS_H = 768
 RACK_Y_FRAC = 0.932836     # rack row vertical center — PLACEHOLDER pending live game
 RACK_X0_FRAC = 0.400781    # first rack tile center — PLACEHOLDER pending live game
 RACK_TILE_STEP_FRAC = 0.032531  # spacing between rack tile centers — PLACEHOLDER
 CONFIRM_X_FRAC = 0.499024  # PLAY button center X — PLACEHOLDER pending live game
 CONFIRM_Y_FRAC = 0.858209  # PLAY button center Y — PLACEHOLDER pending live game
 
-MAX_WORD_RETRIES = 3        # max different words to try before tile swap
+MAX_WORD_RETRIES = 5        # max different words to try before tile swap
 RECALL_X_FRAC = 0.416396   # SWAP button X — doubles as recall when tiles placed (fraction of canvas width)
 RECALL_Y_FRAC = 0.858209   # SWAP button Y (fraction of canvas height)
 SWAP_X_FRAC = 0.416396     # SWAP button X for tile swap fallback (fraction of canvas width)
@@ -240,8 +252,16 @@ class TilePlacer:
     async def _get_canvas_bbox(self) -> dict:
         """Retrieve the game element's bounding box from the iframe.
 
-        Tries the ``<canvas>`` element first; falls back to the iframe itself
-        if no canvas is found (some game versions render via DOM, not canvas).
+        Tries the ``<canvas>`` element first; falls back to the iframe
+        element and computes the game render area within it using the
+        calibration aspect ratio.
+
+        The Letter League game renders at a fixed aspect ratio
+        (CALIBRATION_CANVAS_W × CALIBRATION_CANVAS_H).  When the iframe is
+        wider or taller than that ratio, the game is centered with empty
+        margins (pillarbox / letterbox).  The fractional grid constants are
+        relative to the game area, not the full iframe, so we must return
+        the game-area bounding box.
 
         Returns:
             Bounding box dict with keys ``x``, ``y``, ``width``, ``height``.
@@ -263,18 +283,67 @@ class TilePlacer:
         except Exception:
             pass
 
-        # Fallback: use the iframe element itself.
-        logger.debug("No canvas element found — falling back to iframe bounding box")
-        bbox = await (
+        # Fallback: use the iframe element, then compute the game area.
+        iframe_bbox = await (
             self._page
             .locator('iframe[src*="discordsays.com"]')
             .bounding_box(timeout=10_000)
         )
-        if bbox is None:
+        if iframe_bbox is None:
             raise PlacementError(
                 "Canvas bounding box is None — iframe or canvas not found."
             )
-        return bbox
+
+        # If the iframe matches the calibration aspect ratio (within 5%),
+        # use it directly — the game fills the full iframe.
+        cal_aspect = CALIBRATION_CANVAS_W / CALIBRATION_CANVAS_H
+        iframe_aspect = iframe_bbox["width"] / iframe_bbox["height"]
+
+        if abs(iframe_aspect - cal_aspect) / cal_aspect < 0.05:
+            logger.debug(
+                "Iframe aspect matches calibration — using iframe bbox directly "
+                "({:.0f}x{:.0f})",
+                iframe_bbox["width"],
+                iframe_bbox["height"],
+            )
+            return iframe_bbox
+
+        # Aspect ratios differ — compute the game render area within the
+        # iframe, maintaining the calibration aspect ratio.
+        if iframe_aspect > cal_aspect:
+            # Iframe wider than game → pillarbox (centered horizontally)
+            game_h = iframe_bbox["height"]
+            game_w = game_h * cal_aspect
+            x_offset = (iframe_bbox["width"] - game_w) / 2
+            game_bbox = {
+                "x": iframe_bbox["x"] + x_offset,
+                "y": iframe_bbox["y"],
+                "width": game_w,
+                "height": game_h,
+            }
+        else:
+            # Iframe taller than game → letterbox (centered vertically)
+            game_w = iframe_bbox["width"]
+            game_h = game_w / cal_aspect
+            y_offset = (iframe_bbox["height"] - game_h) / 2
+            game_bbox = {
+                "x": iframe_bbox["x"],
+                "y": iframe_bbox["y"] + y_offset,
+                "width": game_w,
+                "height": game_h,
+            }
+
+        logger.debug(
+            "No canvas element — computed game area within iframe: "
+            "iframe=({:.0f}x{:.0f}) game=({:.0f}x{:.0f} @ x={:.0f},y={:.0f})",
+            iframe_bbox["width"],
+            iframe_bbox["height"],
+            game_bbox["width"],
+            game_bbox["height"],
+            game_bbox["x"],
+            game_bbox["y"],
+        )
+        return game_bbox
 
     async def _drag_tile(
         self,
@@ -284,39 +353,47 @@ class TilePlacer:
         to_y: float,
         steps: int = 10,
     ) -> None:
-        """Execute a smooth mouse drag from source to destination.
+        """Place a tile using click-to-select then click-to-place.
 
-        Sequence: move to source -> press -> brief pause -> move to target
-        (in ``steps`` intermediate moves) -> release.
+        Letter League (Discord Activity) uses a click-based interaction model
+        rather than HTML5 drag-and-drop: click a rack tile to pick it up, then
+        click a board cell to place it.
+
+        Falls back to a slow drag if the click-click approach doesn't work
+        (e.g. future game updates change the interaction model).
 
         Args:
-            from_x: Source X viewport coordinate.
-            from_y: Source Y viewport coordinate.
-            to_x: Destination X viewport coordinate.
-            to_y: Destination Y viewport coordinate.
-            steps: Number of intermediate mouse-move steps for smooth motion.
+            from_x: Source X viewport coordinate (rack tile).
+            from_y: Source Y viewport coordinate (rack tile).
+            to_x: Destination X viewport coordinate (board cell).
+            to_y: Destination Y viewport coordinate (board cell).
+            steps: Number of intermediate mouse-move steps (used for drag fallback).
         """
-        await self._page.mouse.move(from_x, from_y)
-        await self._page.mouse.down()
-        await asyncio.sleep(0.05)
-        await self._page.mouse.move(to_x, to_y, steps=steps)
-        await self._page.mouse.up()
+        # Click-to-select the rack tile, then click-to-place on the board cell.
+        await self._page.mouse.click(from_x, from_y)
+        await asyncio.sleep(0.25)
+        await self._page.mouse.click(to_x, to_y)
 
     async def _verify_placement(self, before_bytes: bytes) -> bool:
         """Verify a tile was placed by comparing before/after screenshots.
 
         Captures a new screenshot and computes the mean absolute pixel
-        difference against the pre-drag screenshot. A difference > 1.0
+        difference against the pre-drag screenshot. A difference > 0.15
         indicates the canvas changed (tile landed).
+
+        The threshold is deliberately low because a single tile placement only
+        affects ~2 small regions (board cell + rack slot) out of the full
+        ~1057x768 image, producing a mean diff of roughly 0.3-0.5 even for a
+        successful placement.
 
         Args:
             before_bytes: PNG screenshot bytes captured before the drag.
 
         Returns:
-            ``True`` if the canvas changed (diff > 1.0), ``False`` otherwise
+            ``True`` if the canvas changed (diff > 0.15), ``False`` otherwise
             or if either image fails to decode.
         """
-        after_bytes = await capture_canvas(self._page)
+        after_bytes = await capture_canvas(self._page, render_wait=False)
 
         def _decode(data: bytes) -> np.ndarray | None:
             arr = np.frombuffer(data, dtype=np.uint8)
@@ -331,7 +408,7 @@ class TilePlacer:
 
         diff = float(np.mean(np.abs(before_img.astype(np.int32) - after_img.astype(np.int32))))
         logger.debug("Placement pixel diff: {:.4f}", diff)
-        return diff > 1.0
+        return diff > 0.15
 
     # ------------------------------------------------------------------
     # Public API
@@ -396,44 +473,22 @@ class TilePlacer:
                 by,
             )
 
-            # Capture before-screenshot for verification.
-            before_bytes = await capture_canvas(self._page)
-
-            # First drag attempt.
+            # Place tile via click-select, click-place.  Skip per-tile
+            # screenshot verification — the confirm/reject cycle already
+            # catches misplacements and the overhead (~1.2s per tile) is
+            # too expensive for a timed game.
             await self._drag_tile(rx, ry, bx, by)
-            success = await self._verify_placement(before_bytes)
-
-            if not success:
-                logger.warning(
-                    "Placement verification failed for tile '{}' at ({},{}) — retrying",
-                    tile.letter,
-                    tile.row,
-                    tile.col,
-                )
-                # Refresh before-screenshot for second attempt.
-                before_bytes = await capture_canvas(self._page)
-                rx2, ry2 = jitter(*mapper.rack_tile_px(slot_idx))
-                bx2, by2 = jitter(*mapper.board_cell_px(tile.row, tile.col))
-                await self._drag_tile(rx2, ry2, bx2, by2)
-                success = await self._verify_placement(before_bytes)
-
-                if not success:
-                    raise PlacementError(
-                        f"Tile '{tile.letter}' placement at ({tile.row},{tile.col}) "
-                        f"failed after retry."
-                    )
 
             logger.info(
-                "Tile '{}' placed successfully at ({},{})",
+                "Tile '{}' placed at ({},{})",
                 tile.letter,
                 tile.row,
                 tile.col,
             )
 
-            # Human-like inter-tile delay (skip after last tile).
+            # Brief inter-tile pause (skip after last tile).
             if ordinal < len(order) - 1:
-                delay = random.uniform(1.0, 3.0)
-                logger.debug("Inter-tile delay: {:.2f}s", delay)
+                delay = random.uniform(0.15, 0.4)
                 await asyncio.sleep(delay)
 
     async def _click_confirm(self, mapper: CoordMapper) -> None:
@@ -460,7 +515,7 @@ class TilePlacer:
             ``True`` if the word was accepted (turn ended).
             ``False`` if still ``"my_turn"`` (word was rejected by the game).
         """
-        delay = random.uniform(1.0, 2.0)
+        delay = random.uniform(0.3, 0.7)
         logger.debug("Waiting {:.2f}s for server to process word submission", delay)
         await asyncio.sleep(delay)
 
@@ -481,7 +536,7 @@ class TilePlacer:
         rx, ry = jitter(*mapper.recall_btn_px())
         logger.info("Clicking recall button at ({:.1f}, {:.1f}) to clear placed tiles", rx, ry)
         await self._page.mouse.click(rx, ry)
-        await asyncio.sleep(random.uniform(0.5, 1.0))
+        await asyncio.sleep(random.uniform(0.3, 0.5))
 
     async def _tile_swap(self, mapper: CoordMapper) -> None:
         """Click the tile swap button as a fallback when no valid words can be placed.

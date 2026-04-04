@@ -131,8 +131,8 @@ def test_single_tile_passes_connectivity():
 # Test 6: multiplier mismatch detected
 # ---------------------------------------------------------------------------
 
-def test_multiplier_mismatch_detected():
-    """A cell whose multiplier doesn't match OFFICIAL_MULTIPLIER_LAYOUT is flagged."""
+def test_multiplier_mismatch_auto_corrected():
+    """A cell whose multiplier doesn't match OFFICIAL_MULTIPLIER_LAYOUT is auto-corrected."""
     # (3, 7) is TW in the official layout — report it as NONE
     cell = {
         "row": 3,
@@ -143,9 +143,12 @@ def test_multiplier_mismatch_detected():
     }
     data = _make_data([cell])
     errors = validate_extraction(data)
-    assert any("Multiplier mismatch" in e for e in errors), (
-        f"Expected 'Multiplier mismatch' error, got: {errors}"
+    # Multiplier mismatches are now silently corrected, not errors
+    assert not any("Multiplier mismatch" in e for e in errors), (
+        f"Expected no multiplier error (auto-corrected), got: {errors}"
     )
+    # Verify the cell was corrected to the official value
+    assert data["board"]["cells"][0]["multiplier"] == "TW"
 
 
 # ---------------------------------------------------------------------------

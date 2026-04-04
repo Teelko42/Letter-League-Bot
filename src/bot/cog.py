@@ -128,11 +128,26 @@ class AdvisorCog(commands.Cog):
                     selected.word if selected else None,
                     time.monotonic() - difficulty_start,
                 )
-                # Put selected move first, then next 2 highest-scoring moves
-                top_moves = [selected] + [m for m in moves if m is not selected][:2]
+                # Put selected move first, then 2 more with distinct words
+                seen_words = {selected.word}
+                alternates: list = []
+                for m in moves:
+                    if m is not selected and m.word not in seen_words:
+                        seen_words.add(m.word)
+                        alternates.append(m)
+                        if len(alternates) == 2:
+                            break
+                top_moves = [selected] + alternates
             else:
-                # Difficulty 100 = optimal — top move is always moves[0]
-                top_moves = moves[:3]
+                # Difficulty 100 = optimal — pick top 3 with distinct words
+                seen_words: set[str] = set()
+                top_moves: list = []
+                for m in moves:
+                    if m.word not in seen_words:
+                        seen_words.add(m.word)
+                        top_moves.append(m)
+                        if len(top_moves) == 3:
+                            break
 
             # Step 9: Build and send success embed
             embed = build_success_embed(top_moves, board)

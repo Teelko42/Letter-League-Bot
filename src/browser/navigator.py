@@ -71,23 +71,47 @@ async def _run_navigation(page: Any, channel_url: str) -> Any:
     logger.info("Navigated to channel: {}", channel_url)
 
     # ------------------------------------------------------------------
-    # Step 2a: Dismiss any blocking modals (e.g. "How'd the call go?")
+    # Step 2a: Let the SPA render, then dismiss any blocking modals
+    #          that appeared from a *previous* session (e.g. "How'd the
+    #          call go?").  We only press Escape if such a modal is
+    #          actually visible — pressing it unconditionally risks
+    #          closing the "Join Voice" prompt that Discord shows when
+    #          navigating to an unjoined voice channel.
     # ------------------------------------------------------------------
-    await asyncio.sleep(2)  # let page settle
-    await page.keyboard.press("Escape")
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(2)  # let page settle / React render
+
+    post_call_modal = page.locator('text="How\'d the call go?"')
+    try:
+        is_visible = await post_call_modal.is_visible()
+        if is_visible:
+            logger.info("Post-call modal visible — dismissing with Escape")
+            await page.keyboard.press("Escape")
+            await asyncio.sleep(0.5)
+    except Exception:
+        pass  # modal check failed — safe to ignore
 
     # ------------------------------------------------------------------
-    # Step 2b: Join the voice channel if a Join Voice button is visible
+    # Step 2b: Join the voice channel if a Join Voice button is visible.
+    #
+    #          Discord renders the join button as a <button> whose
+    #          visible text is "Join Voice".  We combine all known
+    #          selector variants into a single locator using .or() so
+    #          that we wait once (10 s) rather than waiting 10 s per
+    #          selector.  This also avoids a 30-second cascade in the
+    #          "already in voice" case where none of the selectors match.
     # ------------------------------------------------------------------
-    join_btn = page.locator('button:has-text("Join Voice")')
+    join_btn = (
+        page.locator('button:has-text("Join Voice")')
+        .or_(page.locator('button[aria-label="Join Voice"]'))
+        .or_(page.locator('button[aria-label="Join Voice Channel"]'))
+    )
     try:
         await join_btn.wait_for(state="visible", timeout=10_000)
         logger.info("Join Voice button found — clicking to join voice channel")
         await join_btn.click()
         await asyncio.sleep(3)  # Wait for voice UI to fully load
     except Exception:
-        logger.info("No Join Voice button — assuming already in voice channel")
+        logger.info("No Join Voice button found — assuming already in voice channel")
 
     # Dismiss any post-join overlays (e.g. "How'd the call go?" scrim)
     await page.keyboard.press("Escape")

@@ -17,6 +17,26 @@ from src.browser.navigator import navigate_to_activity
 # ---------------------------------------------------------------------------
 
 
+def _make_locator(*, wait_for_exc=None, is_visible=False, click_exc=None):
+    """Build a synchronous MagicMock that looks like a Playwright Locator.
+
+    Playwright Locator is returned synchronously by page.locator() but its
+    methods (wait_for, click, is_visible, fill) are coroutines.  The .or_()
+    method is synchronous and returns another Locator — we make it return the
+    same mock so chaining works transparently.
+    """
+    loc = MagicMock()
+    loc.wait_for = AsyncMock(side_effect=wait_for_exc) if wait_for_exc else AsyncMock()
+    loc.click = AsyncMock(side_effect=click_exc) if click_exc else AsyncMock()
+    loc.is_visible = AsyncMock(return_value=is_visible)
+    loc.fill = AsyncMock()
+    # .or_() is synchronous and returns a Locator — return self for simplicity
+    loc.or_ = MagicMock(return_value=loc)
+    loc.first = loc  # for .first chaining
+    loc.count = AsyncMock(return_value=0)
+    return loc
+
+
 def _make_page(frames=None) -> MagicMock:
     page = MagicMock()
     page.goto = AsyncMock()
@@ -25,28 +45,16 @@ def _make_page(frames=None) -> MagicMock:
     page.frames = frames or []
 
     # Default locators
-    join_btn = AsyncMock()
-    join_btn.wait_for = AsyncMock(side_effect=Exception("not found"))
-    join_btn.click = AsyncMock()
-
-    activity_btn = AsyncMock()
-    activity_btn.wait_for = AsyncMock()
-    activity_btn.click = AsyncMock()
-
-    search_input = AsyncMock()
-    search_input.wait_for = AsyncMock()
-    search_input.fill = AsyncMock()
-
-    result_locator = MagicMock()
-    result_first = AsyncMock()
-    result_first.click = AsyncMock()
-    result_locator.first = result_first
-
-    play_btn = AsyncMock()
-    play_btn.wait_for = AsyncMock(side_effect=Exception("not found"))
-    play_btn.click = AsyncMock()
+    join_btn = _make_locator(wait_for_exc=Exception("not found"))
+    activity_btn = _make_locator()
+    post_call_modal = _make_locator(is_visible=False)
+    search_input = _make_locator()
+    result_locator = _make_locator()
+    play_btn = _make_locator(wait_for_exc=Exception("not found"))
 
     def locator_side_effect(selector):
+        if "How" in selector and "call" in selector:
+            return post_call_modal
         if "Join Voice" in selector:
             return join_btn
         elif "Start An Activity" in selector:
@@ -58,8 +66,8 @@ def _make_page(frames=None) -> MagicMock:
         elif "Play" in selector:
             return play_btn
         elif "iframe" in selector:
-            return MagicMock()
-        return MagicMock()
+            return _make_locator()
+        return _make_locator()
 
     page.locator = MagicMock(side_effect=locator_side_effect)
     return page

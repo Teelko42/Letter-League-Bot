@@ -94,7 +94,7 @@ class AdvisorCog(commands.Cog):
 
             # Step 5: Run vision pipeline (already async, no thread wrapper needed)
             vision_start = time.monotonic()
-            board, rack = await extract_board_state(img_bytes, mode=state.mode)
+            board, rack = await extract_board_state(img_bytes, mode=state.mode, gaddag=self.bot.gaddag)
             logger.info("Vision pipeline completed in {:.2f}s", time.monotonic() - vision_start)
 
             # Step 6: Run engine (CPU-bound sync — must use asyncio.to_thread)

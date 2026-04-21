@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import random
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import cv2
@@ -28,27 +30,37 @@ if TYPE_CHECKING:
 #
 # Board is 19 rows x 27 columns.
 
-GRID_X0_FRAC = 0.085401    # top-left of cell(0,0) X (fraction of canvas width)
-GRID_Y0_FRAC = 0.057552    # top-left of cell(0,0) Y (fraction of canvas height)
-CELL_W_FRAC = 0.02889      # one cell width  (fraction of canvas width)  — 27 cols
-CELL_H_FRAC = 0.03900      # one cell height (fraction of canvas height) — 19 rows
+GRID_X0_FRAC = 0.056820    # top-left of cell(0,0) X (fraction of canvas width)
+GRID_Y0_FRAC = 0.070587    # top-left of cell(0,0) Y (fraction of canvas height)
+CELL_W_FRAC = 0.032756     # one cell width  (fraction of canvas width)  — 27 cols
+CELL_H_FRAC = 0.045038     # one cell height (fraction of canvas height) — 19 rows
 
 # Canvas dimensions when the grid constants above were calibrated.
-# Used to compute the game render area inside the iframe when the <canvas>
-# element cannot be found (the game maintains this aspect ratio).
+# Kept for reference only — not used in placement logic.
 CALIBRATION_CANVAS_W = 1057
 CALIBRATION_CANVAS_H = 768
-RACK_Y_FRAC = 0.932836     # rack row vertical center — PLACEHOLDER pending live game
-RACK_X0_FRAC = 0.400781    # first rack tile center — PLACEHOLDER pending live game
-RACK_TILE_STEP_FRAC = 0.032531  # spacing between rack tile centers — PLACEHOLDER
-CONFIRM_X_FRAC = 0.499024  # PLAY button center X — PLACEHOLDER pending live game
-CONFIRM_Y_FRAC = 0.858209  # PLAY button center Y — PLACEHOLDER pending live game
+RACK_Y_FRAC = 0.932836     # rack row vertical center — calibrated from live 1057x768: y=716 on tile body
+RACK_X0_FRAC = 0.391675    # first rack tile center — calibrated from live 1057x768: x=414
+RACK_TILE_STEP_FRAC = 0.035793  # spacing between rack tile centers — calibrated from live 1057x768: ~38px
+CONFIRM_X_FRAC = 0.499527  # PLAY button center X — calibrated from live 1057x768: x=528 (gray button)
+CONFIRM_Y_FRAC = 0.901042  # PLAY button center Y — calibrated from live 1057x768: y=692 (button bar y=681-703)
+# NOTE: Previous CONFIRM_Y_FRAC=0.858209 was wrong — calibrated on 1537x670 screenshot, not 1057x768.
+# In live 1057x768 frame, 0.858*768=659 lands on game board tiles; correct button bar is at y=681-703.
 
 MAX_WORD_RETRIES = 5        # max different words to try before tile swap
-RECALL_X_FRAC = 0.416396   # SWAP button X — doubles as recall when tiles placed (fraction of canvas width)
-RECALL_Y_FRAC = 0.858209   # SWAP button Y (fraction of canvas height)
-SWAP_X_FRAC = 0.416396     # SWAP button X for tile swap fallback (fraction of canvas width)
-SWAP_Y_FRAC = 0.858209     # SWAP button Y (fraction of canvas height)
+
+# Acceptance-detection polling: how many times (and how often) to re-check the
+# turn state after clicking confirm.  Total wait ≈ polls × interval.
+_ACCEPT_POLLS = 4           # number of post-confirm screenshots
+_ACCEPT_POLL_INTERVAL_S = 1.0  # seconds between each poll
+
+# Debug screenshot directory — captures pre-PLAY and post-RECALL states.
+# Saved to debug/tile_placer/ alongside other debug images.
+_DEBUG_DIR = Path("debug/tile_placer")
+RECALL_X_FRAC = 0.589404   # RECALL button X — RIGHT of PLAY. Three-button layout: SWAP(0.41) | PLAY(0.50) | RECALL(0.59)
+RECALL_Y_FRAC = 0.901042   # RECALL button Y — same button bar row as PLAY (y=692 at 1057x768)
+SWAP_X_FRAC = 0.409650     # SWAP button X — LEFT of PLAY (x=433 at 1057x768). NOT the same as RECALL.
+SWAP_Y_FRAC = 0.901042     # SWAP button Y (fraction of canvas height)
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +106,10 @@ class CoordMapper:
     def board_cell_px(self, row: int, col: int) -> tuple[float, float]:
         """Return viewport pixel coordinates for the center of board cell (row, col).
 
+        GRID_X0/Y0 mark the top-left corner of cell(0,0), so we add half a
+        cell width/height to land on the cell centre rather than on the
+        boundary between adjacent cells.
+
         Args:
             row: Zero-based row index on the board.
             col: Zero-based column index on the board.
@@ -101,8 +117,8 @@ class CoordMapper:
         Returns:
             ``(x, y)`` viewport pixel coordinates.
         """
-        x = self._bbox["x"] + (GRID_X0_FRAC + col * CELL_W_FRAC) * self._bbox["width"]
-        y = self._bbox["y"] + (GRID_Y0_FRAC + row * CELL_H_FRAC) * self._bbox["height"]
+        x = self._bbox["x"] + (GRID_X0_FRAC + (col + 0.5) * CELL_W_FRAC) * self._bbox["width"]
+        y = self._bbox["y"] + (GRID_Y0_FRAC + (row + 0.5) * CELL_H_FRAC) * self._bbox["height"]
         return x, y
 
     def rack_tile_px(self, slot_index: int) -> tuple[float, float]:
@@ -244,24 +260,30 @@ class TilePlacer:
 
     def __init__(self, page: Any) -> None:
         self._page = page
+        self._bbox: dict | None = None  # stashed by place_move for in-frame clicks
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
     async def _get_canvas_bbox(self) -> dict:
-        """Retrieve the game element's bounding box from the iframe.
+        """Retrieve the game iframe's bounding box.
 
-        Tries the ``<canvas>`` element first; falls back to the iframe
-        element and computes the game render area within it using the
-        calibration aspect ratio.
+        All fractional grid constants (GRID_X0_FRAC, RECALL_X_FRAC, etc.)
+        are calibrated against the **full iframe screenshot** as returned by
+        ``capture_canvas``.  That screenshot encompasses the entire iframe
+        area, including any gray letterbox / pillarbox margins the game
+        engine adds when the iframe is larger than the game's natural render
+        resolution.  The fractional constants already encode those margins as
+        part of their measured offsets.
 
-        The Letter League game renders at a fixed aspect ratio
-        (CALIBRATION_CANVAS_W × CALIBRATION_CANVAS_H).  When the iframe is
-        wider or taller than that ratio, the game is centered with empty
-        margins (pillarbox / letterbox).  The fractional grid constants are
-        relative to the game area, not the full iframe, so we must return
-        the game-area bounding box.
+        We intentionally do NOT use the inner ``<canvas>`` element's bbox:
+        the canvas is centered inside the iframe and its bounding box origin
+        is NOT at (0, 0) in the iframe's local coordinate system.  Applying
+        iframe-calibrated fractions to the narrower canvas bbox would
+        produce wrong pixel coordinates — both for viewport mouse clicks and
+        for the ``_click_in_frame`` JS dispatch that uses iframe-local
+        coordinates.
 
         Returns:
             Bounding box dict with keys ``x``, ``y``, ``width``, ``height``.
@@ -269,21 +291,6 @@ class TilePlacer:
         Raises:
             PlacementError: If the bounding box is ``None`` (iframe not found).
         """
-        # Try canvas inside the iframe first.
-        try:
-            bbox = await (
-                self._page
-                .frame_locator('iframe[src*="discordsays.com"]')
-                .locator("canvas")
-                .first
-                .bounding_box(timeout=5_000)
-            )
-            if bbox is not None:
-                return bbox
-        except Exception:
-            pass
-
-        # Fallback: use the iframe element, then compute the game area.
         iframe_bbox = await (
             self._page
             .locator('iframe[src*="discordsays.com"]')
@@ -291,59 +298,17 @@ class TilePlacer:
         )
         if iframe_bbox is None:
             raise PlacementError(
-                "Canvas bounding box is None — iframe or canvas not found."
+                "Canvas bounding box is None — iframe not found."
             )
-
-        # If the iframe matches the calibration aspect ratio (within 5%),
-        # use it directly — the game fills the full iframe.
-        cal_aspect = CALIBRATION_CANVAS_W / CALIBRATION_CANVAS_H
-        iframe_aspect = iframe_bbox["width"] / iframe_bbox["height"]
-
-        if abs(iframe_aspect - cal_aspect) / cal_aspect < 0.05:
-            logger.debug(
-                "Iframe aspect matches calibration — using iframe bbox directly "
-                "({:.0f}x{:.0f})",
-                iframe_bbox["width"],
-                iframe_bbox["height"],
-            )
-            return iframe_bbox
-
-        # Aspect ratios differ — compute the game render area within the
-        # iframe, maintaining the calibration aspect ratio.
-        if iframe_aspect > cal_aspect:
-            # Iframe wider than game → pillarbox (centered horizontally)
-            game_h = iframe_bbox["height"]
-            game_w = game_h * cal_aspect
-            x_offset = (iframe_bbox["width"] - game_w) / 2
-            game_bbox = {
-                "x": iframe_bbox["x"] + x_offset,
-                "y": iframe_bbox["y"],
-                "width": game_w,
-                "height": game_h,
-            }
-        else:
-            # Iframe taller than game → letterbox (centered vertically)
-            game_w = iframe_bbox["width"]
-            game_h = game_w / cal_aspect
-            y_offset = (iframe_bbox["height"] - game_h) / 2
-            game_bbox = {
-                "x": iframe_bbox["x"],
-                "y": iframe_bbox["y"] + y_offset,
-                "width": game_w,
-                "height": game_h,
-            }
 
         logger.debug(
-            "No canvas element — computed game area within iframe: "
-            "iframe=({:.0f}x{:.0f}) game=({:.0f}x{:.0f} @ x={:.0f},y={:.0f})",
+            "Using iframe bbox: {:.0f}x{:.0f} @ ({:.0f},{:.0f})",
             iframe_bbox["width"],
             iframe_bbox["height"],
-            game_bbox["width"],
-            game_bbox["height"],
-            game_bbox["x"],
-            game_bbox["y"],
+            iframe_bbox["x"],
+            iframe_bbox["y"],
         )
-        return game_bbox
+        return iframe_bbox
 
     async def _drag_tile(
         self,
@@ -371,8 +336,139 @@ class TilePlacer:
         """
         # Click-to-select the rack tile, then click-to-place on the board cell.
         await self._page.mouse.click(from_x, from_y)
-        await asyncio.sleep(0.25)
+        await asyncio.sleep(0.5)
         await self._page.mouse.click(to_x, to_y)
+
+    async def _dismiss_blank_letter_dialog(self, letter: str) -> None:
+        """Dismiss the "Select a letter" dialog that appears after placing a blank tile.
+
+        When a blank tile ('?') is placed on the board, the game shows a modal
+        dialog with a grid of A-Z letter buttons.  The player (or bot) must click
+        the desired letter before the game will allow the PLAY button to be
+        active.
+
+        Tries three strategies in order, retrying up to 2 times:
+          1. **Keyboard press** — presses the letter key.  Cheapest approach and
+             works if the game accepts keyboard input while the dialog is open.
+          2. **Frame locator click** — finds the button whose exact text matches
+             ``letter`` inside the game iframe and clicks it.
+          3. **Viewport click** — clicks the computed pixel position of the
+             letter button within the dialog's 7-column grid.
+
+        After each round of strategies, captures a screenshot to verify the
+        dialog closed (significant pixel change). Retries once if it didn't.
+
+        Args:
+            letter: The uppercase letter the blank tile should represent (A-Z).
+        """
+        letter = letter.upper()
+
+        before_bytes = await capture_canvas(self._page, render_wait=False)
+
+        for attempt in range(2):
+            if attempt > 0:
+                logger.warning(
+                    "Blank dialog: retry {} for letter '{}'", attempt, letter,
+                )
+                await asyncio.sleep(0.5)
+
+            # Strategy 1: press the letter key on the keyboard.
+            try:
+                await self._page.keyboard.press(letter)
+                await asyncio.sleep(0.4)
+                if await self._verify_dialog_dismissed(before_bytes):
+                    logger.info("Blank dialog: dismissed '{}' via keyboard press", letter)
+                    return
+            except Exception as exc:
+                logger.debug("Blank dialog: keyboard press failed for '{}' ({})", letter, exc)
+
+            # Strategy 2: find the letter button as a DOM element inside the iframe.
+            try:
+                frame = self._page.frame_locator('iframe[src*="discordsays.com"]')
+                letter_btn = frame.get_by_text(letter, exact=True).first
+                await letter_btn.click(timeout=3_000)
+                await asyncio.sleep(0.4)
+                if await self._verify_dialog_dismissed(before_bytes):
+                    logger.info("Blank dialog: dismissed '{}' via frame locator", letter)
+                    return
+            except Exception as exc:
+                logger.debug("Blank dialog: frame locator failed for '{}' ({})", letter, exc)
+
+            # Strategy 3: compute the button's pixel position from the known 7-column
+            # alphabetical grid layout and click via viewport mouse.
+            COLS = 7
+            DIALOG_LEFT_FRAC = 0.32
+            DIALOG_RIGHT_FRAC = 0.68
+            GRID_TOP_FRAC = 0.36
+            GRID_BOTTOM_FRAC = 0.67
+
+            letter_idx = ord(letter) - ord("A")
+            col_idx = letter_idx % COLS
+            row_idx = letter_idx // COLS
+
+            cell_w = (DIALOG_RIGHT_FRAC - DIALOG_LEFT_FRAC) / COLS
+            cell_h = (GRID_BOTTOM_FRAC - GRID_TOP_FRAC) / 4
+
+            frac_x = DIALOG_LEFT_FRAC + (col_idx + 0.5) * cell_w
+            frac_y = GRID_TOP_FRAC + (row_idx + 0.5) * cell_h
+
+            bbox = self._bbox
+            if bbox is None:
+                try:
+                    bbox = await self._get_canvas_bbox()
+                except Exception:
+                    logger.warning("Blank dialog: cannot get bbox for viewport click — skipping")
+                    continue
+
+            vp_x = bbox["x"] + frac_x * bbox["width"]
+            vp_y = bbox["y"] + frac_y * bbox["height"]
+
+            try:
+                await self._page.mouse.click(vp_x, vp_y)
+                await asyncio.sleep(0.4)
+                if await self._verify_dialog_dismissed(before_bytes):
+                    logger.info(
+                        "Blank dialog: dismissed '{}' via viewport at ({:.1f}, {:.1f})",
+                        letter, vp_x, vp_y,
+                    )
+                    return
+            except Exception as exc:
+                logger.warning("Blank dialog: viewport click failed for '{}': {}", letter, exc)
+
+        logger.error(
+            "Blank dialog: FAILED to dismiss for '{}' after all attempts — "
+            "subsequent placements may fail",
+            letter,
+        )
+
+    async def _verify_dialog_dismissed(self, before_bytes: bytes) -> bool:
+        """Check if the blank-tile dialog was dismissed by comparing screenshots.
+
+        A significant pixel change indicates the dialog overlay disappeared.
+        Uses the same approach as ``_verify_placement`` but with a lower
+        threshold since the dialog covers a large portion of the screen.
+
+        Args:
+            before_bytes: PNG screenshot captured while the dialog was visible.
+
+        Returns:
+            ``True`` if the screen changed (dialog likely closed).
+        """
+        after_bytes = await capture_canvas(self._page, render_wait=False)
+
+        def _decode(data: bytes) -> np.ndarray | None:
+            arr = np.frombuffer(data, dtype=np.uint8)
+            return cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+        before_img = _decode(before_bytes)
+        after_img = _decode(after_bytes)
+
+        if before_img is None or after_img is None:
+            return True  # Can't verify — assume success
+
+        diff = float(np.mean(np.abs(before_img.astype(np.int32) - after_img.astype(np.int32))))
+        logger.debug("Blank dialog dismiss pixel diff: {:.4f}", diff)
+        return diff > 0.10
 
     async def _verify_placement(self, before_bytes: bytes) -> bool:
         """Verify a tile was placed by comparing before/after screenshots.
@@ -473,14 +569,44 @@ class TilePlacer:
                 by,
             )
 
-            # Place tile via click-select, click-place.  Skip per-tile
-            # screenshot verification — the confirm/reject cycle already
-            # catches misplacements and the overhead (~1.2s per tile) is
-            # too expensive for a timed game.
+            # Place tile via click-select, click-place with verification.
+            # Capture a before screenshot, drag the tile, then verify the
+            # canvas changed.  Retry once on failure with fresh jitter.
+            before_bytes = await capture_canvas(self._page, render_wait=False)
             await self._drag_tile(rx, ry, bx, by)
+            await asyncio.sleep(0.3)  # Let the game register the placement.
+
+            placed = await self._verify_placement(before_bytes)
+            if not placed:
+                logger.warning(
+                    "Tile '{}' placement not verified — retrying with fresh jitter",
+                    tile.letter,
+                )
+                rx2, ry2 = jitter(*mapper.rack_tile_px(slot_idx))
+                bx2, by2 = jitter(*mapper.board_cell_px(tile.row, tile.col))
+                before_bytes = await capture_canvas(self._page, render_wait=False)
+                await self._drag_tile(rx2, ry2, bx2, by2)
+                await asyncio.sleep(0.3)
+
+                placed = await self._verify_placement(before_bytes)
+                if not placed:
+                    raise PlacementError(
+                        f"Tile '{tile.letter}' at ({tile.row},{tile.col}) failed "
+                        f"to place after retry"
+                    )
+
+            # If this is a blank tile, the game immediately opens a "Select a
+            # letter" modal dialog.  We must dismiss it by clicking the target
+            # letter before the bot can continue placing other tiles or clicking
+            # PLAY.  Without this step the dialog blocks all subsequent UI
+            # interaction and the word is never submitted.
+            if tile.is_blank:
+                await asyncio.sleep(0.5)  # Give the dialog time to animate in.
+                await self._dismiss_blank_letter_dialog(tile.letter)
+                await asyncio.sleep(0.5)  # Let the dialog fully close before next tile.
 
             logger.info(
-                "Tile '{}' placed at ({},{})",
+                "Tile '{}' verified at ({},{})",
                 tile.letter,
                 tile.row,
                 tile.col,
@@ -488,55 +614,146 @@ class TilePlacer:
 
             # Brief inter-tile pause (skip after last tile).
             if ordinal < len(order) - 1:
-                delay = random.uniform(0.15, 0.4)
+                delay = random.uniform(0.4, 0.7)
                 await asyncio.sleep(delay)
 
-    async def _click_confirm(self, mapper: CoordMapper) -> None:
-        """Click the confirm button with jitter to submit the placed word.
+    def _get_game_frame(self) -> Any | None:
+        """Return the discordsays.com Frame object, or None."""
+        for f in self._page.frames:
+            if "discordsays.com" in (f.url or ""):
+                return f
+        return None
 
-        Uses ``page.mouse.click`` (teleport, not drag) as confirm is a simple
-        button click rather than a drag-and-drop interaction.
+    async def _click_in_frame(self, local_x: float, local_y: float) -> None:
+        """Dispatch a full pointer+mouse click sequence inside the game iframe.
+
+        When ``page.mouse.click()`` at viewport coordinates fails to reach
+        game UI elements (buttons rendered on a canvas inside a cross-origin
+        iframe), this helper dispatches synthetic pointer and mouse events
+        directly in the iframe's JavaScript context at *iframe-local*
+        coordinates.  This bypasses any outer-page overlays or event-capture
+        layers that might intercept viewport-level clicks.
+
+        Args:
+            local_x: X coordinate relative to the iframe's top-left corner.
+            local_y: Y coordinate relative to the iframe's top-left corner.
+        """
+        game_frame = self._get_game_frame()
+        if game_frame is None:
+            raise PlacementError("Game frame not found for in-frame click")
+
+        await game_frame.evaluate(
+            """([x, y]) => {
+                const el = document.elementFromPoint(x, y) || document.body;
+                const opts = {clientX: x, clientY: y, bubbles: true,
+                              cancelable: true, pointerId: 1,
+                              pointerType: 'mouse', button: 0};
+                el.dispatchEvent(new PointerEvent('pointerdown', opts));
+                el.dispatchEvent(new MouseEvent('mousedown',
+                    {clientX: x, clientY: y, bubbles: true, button: 0}));
+                el.dispatchEvent(new PointerEvent('pointerup', opts));
+                el.dispatchEvent(new MouseEvent('mouseup',
+                    {clientX: x, clientY: y, bubbles: true, button: 0}));
+                el.dispatchEvent(new MouseEvent('click',
+                    {clientX: x, clientY: y, bubbles: true, button: 0}));
+            }""",
+            [local_x, local_y],
+        )
+
+    async def _click_confirm(self, mapper: CoordMapper) -> None:
+        """Click the confirm button to submit the placed word.
+
+        Uses viewport-level ``page.mouse.click`` — the same mechanism that
+        ``_drag_tile`` uses to place tiles on the board.  Synthetic JS
+        dispatch (``_click_in_frame``) silently "succeeds" on canvas-rendered
+        buttons without actually triggering the game's event handlers, so we
+        avoid it here.
 
         Args:
             mapper: ``CoordMapper`` instance for current canvas dimensions.
         """
-        cx, cy = jitter(*mapper.confirm_btn_px())
-        logger.info("Clicking confirm button at ({:.1f}, {:.1f})", cx, cy)
-        await self._page.mouse.click(cx, cy)
+        cx, cy = mapper.confirm_btn_px()
+        vx, vy = jitter(cx, cy)
+        logger.info("Clicking confirm/PLAY button at ({:.1f}, {:.1f})", vx, vy)
+        await self._page.mouse.click(vx, vy)
 
-    async def _wait_for_acceptance(self) -> bool:
-        """Wait 1-2 seconds then check if the word was accepted by the game.
+    async def _wait_for_acceptance(self, mapper: CoordMapper) -> bool:
+        """Poll the turn state to detect word acceptance, retrying PLAY once.
 
-        Captures a fresh screenshot and calls ``classify_frame()`` to determine
-        the current turn state. If the state is not ``"my_turn"``, the bot's
-        turn has ended (word was accepted or the game moved on).
+        After clicking confirm, the game needs time to validate and animate.
+        Polls up to ``_ACCEPT_POLLS`` times.  If no state change is detected
+        after half the polls, re-clicks the PLAY button once (the first click
+        may have been consumed by an overlay or event handler) and continues
+        polling for the remaining attempts.
+
+        Args:
+            mapper: ``CoordMapper`` for re-clicking if the first attempt failed.
 
         Returns:
             ``True`` if the word was accepted (turn ended).
-            ``False`` if still ``"my_turn"`` (word was rejected by the game).
+            ``False`` if still ``"my_turn"`` after all polls (word rejected).
         """
-        delay = random.uniform(0.3, 0.7)
-        logger.debug("Waiting {:.2f}s for server to process word submission", delay)
-        await asyncio.sleep(delay)
+        retry_at = _ACCEPT_POLLS // 2  # re-click PLAY halfway through
 
-        img_bytes = await capture_canvas(self._page)
-        state = classify_frame(img_bytes)
-        logger.debug("Post-confirm turn state: {}", state)
-        return state != "my_turn"
+        for attempt in range(1, _ACCEPT_POLLS + 1):
+            await asyncio.sleep(_ACCEPT_POLL_INTERVAL_S)
+            img_bytes = await capture_canvas(self._page, render_wait=False)
+            state = classify_frame(img_bytes)
+            logger.debug("Post-confirm poll {}/{}: {}", attempt, _ACCEPT_POLLS, state)
+            if state != "my_turn":
+                return True
 
-    async def _recall_tiles(self, mapper: CoordMapper) -> None:
+            # Retry PLAY click once, halfway through the poll window.
+            if attempt == retry_at:
+                logger.debug("Re-clicking PLAY (retry after {} polls)", retry_at)
+                await self._click_confirm(mapper)
+
+        return False
+
+    async def _save_debug_screenshot(self, label: str) -> None:
+        """Capture and save a debug screenshot to debug/tile_placer/.
+
+        Saves a PNG named ``{label}.png`` for diagnostic inspection.  Failures
+        are logged at WARNING and never propagate — this is best-effort.
+
+        Args:
+            label: Short descriptive name for the screenshot file (no extension).
+        """
+        try:
+            _DEBUG_DIR.mkdir(parents=True, exist_ok=True)
+            img_bytes = await capture_canvas(self._page, render_wait=False)
+            debug_path = _DEBUG_DIR / f"{label}.png"
+            debug_path.write_bytes(img_bytes)
+            logger.debug("Debug screenshot saved -> {}", debug_path)
+        except Exception as exc:
+            logger.warning("Debug screenshot '{}' failed: {}", label, exc)
+
+    async def _recall_tiles(self, mapper: CoordMapper, attempt_num: int = 0) -> None:
         """Click the recall/undo button to return placed tiles to the rack.
 
         Called after a word rejection so the bot can try a different word.
-        Waits briefly after clicking for the animation to complete.
+        Uses viewport-level ``page.mouse.click`` — the same mechanism that
+        ``_drag_tile`` uses.  Synthetic JS dispatch silently "succeeds" on
+        canvas-rendered buttons without triggering the game's handlers.
+
+        The post-click delay is intentionally generous (1.0–1.5 s) — the game
+        animates tiles flying back from the board to the rack, and if the next
+        placement starts before the animation finishes the game may reject or
+        mishandle the subsequent clicks.
 
         Args:
-            mapper: ``CoordMapper`` instance for current canvas dimensions.
+            mapper:      ``CoordMapper`` instance for current canvas dimensions.
+            attempt_num: Current word attempt index (used in the debug filename).
         """
-        rx, ry = jitter(*mapper.recall_btn_px())
-        logger.info("Clicking recall button at ({:.1f}, {:.1f}) to clear placed tiles", rx, ry)
-        await self._page.mouse.click(rx, ry)
-        await asyncio.sleep(random.uniform(0.3, 0.5))
+        rx, ry = mapper.recall_btn_px()
+        jx, jy = jitter(rx, ry)
+        logger.info("Clicking recall button at ({:.1f}, {:.1f}) to clear placed tiles", jx, jy)
+        await self._page.mouse.click(jx, jy)
+
+        # Give the game's recall animation time to fully complete before the
+        # next placement cycle starts.  0.3-0.5 s was too short in testing.
+        await asyncio.sleep(random.uniform(1.0, 1.5))
+        await self._save_debug_screenshot(f"post_recall_attempt{attempt_num}")
 
     async def _tile_swap(self, mapper: CoordMapper) -> None:
         """Click the tile swap button as a fallback when no valid words can be placed.
@@ -547,16 +764,22 @@ class TilePlacer:
         Args:
             mapper: ``CoordMapper`` instance for current canvas dimensions.
         """
-        sx, sy = jitter(*mapper.swap_btn_px())
+        sx, sy = mapper.swap_btn_px()
+        jx, jy = jitter(sx, sy)
         logger.warning(
             "Falling back to tile swap at ({:.1f}, {:.1f}) — no valid words accepted after {} attempts",
-            sx,
-            sy,
+            jx,
+            jy,
             MAX_WORD_RETRIES,
         )
-        await self._page.mouse.click(sx, sy)
+        await self._page.mouse.click(jx, jy)
 
-    async def place_move(self, moves: list[Move], rack: list[str]) -> bool:
+    async def place_move(
+        self,
+        moves: list[Move],
+        rack: list[str],
+        swap_on_fail: bool = True,
+    ) -> bool:
         """Orchestrate the full tile placement + confirmation flow.
 
         Iterates through up to ``MAX_WORD_RETRIES`` candidate moves (sorted
@@ -569,12 +792,8 @@ class TilePlacer:
         5. If rejected: log rejection, recall tiles, try the next move.
 
         If all word attempts are exhausted without acceptance, performs a tile
-        swap as a last resort and returns ``False``.
-
-        PlacementError exceptions raised during ``place_tiles()`` are caught
-        per-move — the bot logs the error, attempts recall, and continues to
-        the next candidate move. If the final attempt also fails with
-        PlacementError, execution falls through to tile swap.
+        swap as a last resort (unless ``swap_on_fail`` is ``False``) and
+        returns ``False``.
 
         Args:
             moves: Candidate ``Move`` objects sorted by score descending (best
@@ -582,9 +801,12 @@ class TilePlacer:
                 This method does not call the engine — the caller provides the
                 list.
             rack: Current rack as a list of letter strings (``'?'`` for blank).
+            swap_on_fail: If ``True`` (default), perform a tile swap when all
+                word attempts fail.  If ``False``, return ``False`` without
+                swapping — the caller can retry with fresh vision data.
 
         Returns:
-            ``True`` if a word was accepted; ``False`` if tile swap was used.
+            ``True`` if a word was accepted; ``False`` if all attempts failed.
         """
         attempt_limit = min(len(moves), MAX_WORD_RETRIES)
 
@@ -599,9 +821,9 @@ class TilePlacer:
 
             try:
                 await self.place_tiles(move, rack)
-            except PlacementError as exc:
+            except (PlacementError, ValueError) as exc:
                 logger.error(
-                    "PlacementError during tile drag for '{}' (attempt {}): {}",
+                    "Tile placement failed for '{}' (attempt {}): {}",
                     move.word,
                     attempt_num,
                     exc,
@@ -610,17 +832,22 @@ class TilePlacer:
                 try:
                     bbox = await self._get_canvas_bbox()
                     mapper = CoordMapper(bbox)
-                    await self._recall_tiles(mapper)
+                    await self._recall_tiles(mapper, attempt_num=attempt_num)
                 except Exception as recall_exc:
                     logger.warning("Recall after PlacementError also failed: {}", recall_exc)
                 continue
 
-            # Tiles placed — click confirm and wait for server response.
+            # Tiles placed — save diagnostic screenshot, then brief settle
+            # before clicking confirm.  The pre-PLAY screenshot lets us verify
+            # that tiles are at the correct board cells before submission.
+            await self._save_debug_screenshot(f"pre_play_attempt{attempt_num}_{move.word}")
+            await asyncio.sleep(random.uniform(0.4, 0.8))
             bbox = await self._get_canvas_bbox()
+            self._bbox = bbox  # stash for _click_confirm in-frame strategy
             mapper = CoordMapper(bbox)
             await self._click_confirm(mapper)
 
-            accepted = await self._wait_for_acceptance()
+            accepted = await self._wait_for_acceptance(mapper)
 
             if accepted:
                 logger.info(
@@ -638,14 +865,20 @@ class TilePlacer:
                 attempt_num,
                 attempt_limit,
             )
-            await self._recall_tiles(mapper)
+            await self._recall_tiles(mapper, attempt_num=attempt_num)
 
-        # All word attempts exhausted — fall back to tile swap.
-        logger.warning(
-            "All {} word attempt(s) failed — performing tile swap fallback",
-            attempt_limit,
-        )
-        bbox = await self._get_canvas_bbox()
-        mapper = CoordMapper(bbox)
-        await self._tile_swap(mapper)
+        # All word attempts exhausted.
+        if swap_on_fail:
+            logger.warning(
+                "All {} word attempt(s) failed — performing tile swap fallback",
+                attempt_limit,
+            )
+            bbox = await self._get_canvas_bbox()
+            mapper = CoordMapper(bbox)
+            await self._tile_swap(mapper)
+        else:
+            logger.warning(
+                "All {} word attempt(s) failed — returning to caller for re-vision",
+                attempt_limit,
+            )
         return False

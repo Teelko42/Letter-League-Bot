@@ -244,6 +244,8 @@ async def test_swap_on_no_moves() -> None:
     with patch("src.bot.autoplay_cog.BrowserSession") as MockSession, \
          patch("src.bot.autoplay_cog.navigate_to_activity", new_callable=AsyncMock), \
          patch("src.bot.autoplay_cog.preflight_check", new_callable=AsyncMock), \
+         patch("src.bot.autoplay_cog.wait_for_game_ready", new_callable=AsyncMock), \
+         patch("src.bot.autoplay_cog.click_start_game", new_callable=AsyncMock), \
          patch("src.bot.autoplay_cog.poll_turn", new_callable=AsyncMock) as mock_poll, \
          patch("src.bot.autoplay_cog.capture_canvas", new_callable=AsyncMock) as mock_capture, \
          patch("src.bot.autoplay_cog.extract_board_state", new_callable=AsyncMock) as mock_vision, \
@@ -323,6 +325,8 @@ async def test_game_over_stops_loop() -> None:
     with patch("src.bot.autoplay_cog.BrowserSession") as MockSession, \
          patch("src.bot.autoplay_cog.navigate_to_activity", new_callable=AsyncMock), \
          patch("src.bot.autoplay_cog.preflight_check", new_callable=AsyncMock), \
+         patch("src.bot.autoplay_cog.wait_for_game_ready", new_callable=AsyncMock), \
+         patch("src.bot.autoplay_cog.click_start_game", new_callable=AsyncMock), \
          patch("src.bot.autoplay_cog.poll_turn", new_callable=AsyncMock) as mock_poll, \
          patch.dict(os.environ, {"VOICE_CHANNEL_URL": "https://discord.com/channels/1/2"}):
 
@@ -370,6 +374,8 @@ async def test_vision_retry_then_skip() -> None:
     with patch("src.bot.autoplay_cog.BrowserSession") as MockSession, \
          patch("src.bot.autoplay_cog.navigate_to_activity", new_callable=AsyncMock), \
          patch("src.bot.autoplay_cog.preflight_check", new_callable=AsyncMock), \
+         patch("src.bot.autoplay_cog.wait_for_game_ready", new_callable=AsyncMock), \
+         patch("src.bot.autoplay_cog.click_start_game", new_callable=AsyncMock), \
          patch("src.bot.autoplay_cog.poll_turn", new_callable=AsyncMock) as mock_poll, \
          patch("src.bot.autoplay_cog.capture_canvas", new_callable=AsyncMock) as mock_capture, \
          patch("src.bot.autoplay_cog.extract_board_state", new_callable=AsyncMock) as mock_vision, \
@@ -425,3 +431,49 @@ def test_cog_unload_cancels_task() -> None:
     cog.cog_unload()
 
     mock_task.cancel.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Test 12: Stop during poll_turn exits loop without further turn processing
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_stop_during_poll_turn_exits_cleanly() -> None:
+    """When poll_turn returns 'stop_requested', loop exits without placing a move."""
+    cog = AutoPlayCog(_make_mock_bot())
+    channel = AsyncMock()
+    channel.send = AsyncMock()
+
+    with patch("src.bot.autoplay_cog.BrowserSession") as MockSession, \
+         patch("src.bot.autoplay_cog.navigate_to_activity", new_callable=AsyncMock), \
+         patch("src.bot.autoplay_cog.preflight_check", new_callable=AsyncMock), \
+         patch("src.bot.autoplay_cog.wait_for_game_ready", new_callable=AsyncMock), \
+         patch("src.bot.autoplay_cog.click_start_game", new_callable=AsyncMock), \
+         patch("src.bot.autoplay_cog.poll_turn", new_callable=AsyncMock) as mock_poll, \
+         patch.dict(os.environ, {"VOICE_CHANNEL_URL": "https://discord.com/channels/1/2"}):
+
+        mock_page = MagicMock()
+        mock_session = AsyncMock()
+        mock_session.start = AsyncMock(return_value=mock_page)
+        mock_session.close = AsyncMock()
+        MockSession.return_value = mock_session
+
+        cog._state = LoopState(phase=AutoPlayPhase.STARTING, channel_id=42)
+
+        # poll_turn immediately signals stop (as if stop_event fired during polling)
+        mock_poll.return_value = "stop_requested"
+
+        mock_placer = AsyncMock()
+        mock_placer.place_move = AsyncMock(return_value=True)
+
+        with patch("src.bot.autoplay_cog.TilePlacer", return_value=mock_placer):
+            await cog._run_game_loop(channel, "https://discord.com/channels/1/2")
+
+    # No move should have been placed
+    mock_placer.place_move.assert_not_awaited()
+
+    # No channel message should have been sent (no embed for a clean stop)
+    channel.send.assert_not_awaited()
+
+    # State should be reset after loop exit
+    assert cog._state is None

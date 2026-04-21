@@ -44,22 +44,24 @@ OFFSET_BBOX = {"x": 100, "y": 50, "width": 1000, "height": 800}
 
 class TestCoordMapper:
     def test_board_cell_px_origin(self):
+        """Cell (0,0) should target the centre of the first cell."""
         mapper = CoordMapper(SIMPLE_BBOX)
         x, y = mapper.board_cell_px(0, 0)
-        assert x == pytest.approx(GRID_X0_FRAC * 1000)
-        assert y == pytest.approx(GRID_Y0_FRAC * 800)
+        assert x == pytest.approx((GRID_X0_FRAC + 0.5 * CELL_W_FRAC) * 1000)
+        assert y == pytest.approx((GRID_Y0_FRAC + 0.5 * CELL_H_FRAC) * 800)
 
     def test_board_cell_px_offset(self):
+        """Cell (7,7) should be offset by 7.5 cells from the grid origin."""
         mapper = CoordMapper(SIMPLE_BBOX)
         x, y = mapper.board_cell_px(7, 7)
-        assert x == pytest.approx((GRID_X0_FRAC + 7 * CELL_W_FRAC) * 1000)
-        assert y == pytest.approx((GRID_Y0_FRAC + 7 * CELL_H_FRAC) * 800)
+        assert x == pytest.approx((GRID_X0_FRAC + 7.5 * CELL_W_FRAC) * 1000)
+        assert y == pytest.approx((GRID_Y0_FRAC + 7.5 * CELL_H_FRAC) * 800)
 
     def test_board_cell_px_with_nonzero_bbox_origin(self):
         mapper = CoordMapper(OFFSET_BBOX)
         x, y = mapper.board_cell_px(0, 0)
-        assert x == pytest.approx(100 + GRID_X0_FRAC * 1000)
-        assert y == pytest.approx(50 + GRID_Y0_FRAC * 800)
+        assert x == pytest.approx(100 + (GRID_X0_FRAC + 0.5 * CELL_W_FRAC) * 1000)
+        assert y == pytest.approx(50 + (GRID_Y0_FRAC + 0.5 * CELL_H_FRAC) * 800)
 
     def test_rack_tile_px_slot_0(self):
         mapper = CoordMapper(SIMPLE_BBOX)

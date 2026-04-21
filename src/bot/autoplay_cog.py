@@ -37,7 +37,7 @@ from src.browser.capture import capture_canvas
 from src.browser.navigator import navigate_to_activity
 from src.browser.session import BrowserSession
 from src.browser.tile_placer import TilePlacer
-from src.browser.turn_detector import poll_turn, preflight_check
+from src.browser.turn_detector import click_start_game, poll_turn, preflight_check, wait_for_game_ready
 from src.engine.moves import find_all_moves
 from src.vision import extract_board_state
 
@@ -115,7 +115,7 @@ class AutoPlayCog(commands.Cog):
 
     @autoplay_group.command(name="stop", description="Stop autoplay after the current turn")
     async def autoplay_stop(self, interaction: discord.Interaction) -> None:
-        """Signal the game loop to stop after completing the current turn."""
+        """Signal the game loop to stop and force-cancel if it doesn't exit quickly."""
         if self._state is None or self._state.phase == AutoPlayPhase.IDLE:
             await interaction.response.send_message(
                 embed=build_error_embed_generic("Autoplay is not currently active."),
@@ -125,8 +125,17 @@ class AutoPlayCog(commands.Cog):
 
         self._stop_event.set()
         self._state.phase = AutoPlayPhase.STOPPING
+
+        # Force-cancel the task if the cooperative stop doesn't work.
+        # The game loop may be stuck in a long-running await (Claude API,
+        # browser interaction, etc.) that doesn't check stop_event.
+        # CancelledError is caught in the game loop's finally block,
+        # which handles cleanup (browser close, state reset).
+        if self._loop_task and not self._loop_task.done():
+            self._loop_task.cancel()
+
         await interaction.response.send_message(
-            "Finishing current turn, then stopping...",
+            "Stopping autoplay...",
             ephemeral=True,
         )
 
@@ -188,6 +197,8 @@ class AutoPlayCog(commands.Cog):
             logger.info("AutoPlay: browser started, navigating to activity")
             await navigate_to_activity(page, channel_url)
             await preflight_check(page)
+            await wait_for_game_ready(page)
+            await click_start_game(page)
 
             placer = TilePlacer(page)
 
@@ -199,11 +210,23 @@ class AutoPlayCog(commands.Cog):
             # Main turn loop
             # ------------------------------------------------------------------
             while not self._stop_event.is_set():
-                # Step 1: Wait for our turn (or game over)
-                turn_state = await poll_turn(page)
+                # Step 1: Wait for our turn (or game over / idle timeout / stop)
+                turn_state = await poll_turn(page, stop_event=self._stop_event)
+                if turn_state == "stop_requested":
+                    logger.info("AutoPlay: stop requested during turn polling — exiting loop")
+                    break
                 if turn_state == "game_over":
                     logger.info("AutoPlay: game over detected after {} turns", self._state.turn_count)
                     await channel.send(embed=build_gameover_embed(self._state.turn_count))
+                    break
+                if turn_state == "idle_timeout":
+                    logger.warning("AutoPlay: idle timeout — opponent may be AFK")
+                    await channel.send(
+                        embed=build_error_embed_generic(
+                            "Autoplay stopped: no turn received for 5 minutes. "
+                            "The opponent may be AFK or the game may have ended."
+                        )
+                    )
                     break
 
                 # Step 2: Capture board and run vision pipeline (retry once on failure)
@@ -214,7 +237,7 @@ class AutoPlayCog(commands.Cog):
                     try:
                         img_bytes = await capture_canvas(page)
                         ch_state = self.bot.channel_store.get(self._state.channel_id)
-                        board, rack = await extract_board_state(img_bytes, mode=ch_state.mode)
+                        board, rack = await extract_board_state(img_bytes, mode=ch_state.mode, gaddag=self.bot.gaddag)
                         vision_ok = True
                         break
                     except Exception as exc:
@@ -252,8 +275,44 @@ class AutoPlayCog(commands.Cog):
                     candidates = []
 
                 # Step 4: Place move (or swap if no candidates)
+                # Try placement.  If all words are rejected, re-capture the
+                # board with fresh vision before falling back to tile swap.
+                # The first vision read may have misread a tile (wrong letter
+                # or dropped cell), causing all engine moves to form invalid
+                # cross-words on the real board.
                 self._state.turn_count += 1
-                accepted = await placer.place_move(candidates, rack)
+                try:
+                    accepted = await placer.place_move(candidates, rack, swap_on_fail=False)
+                except Exception as exc:
+                    logger.warning("AutoPlay: place_move failed — {}", exc)
+                    accepted = False
+
+                if not accepted and candidates:
+                    logger.warning(
+                        "AutoPlay: all words rejected — retrying with fresh vision"
+                    )
+                    try:
+                        img_bytes = await capture_canvas(page)
+                        ch_state = self.bot.channel_store.get(self._state.channel_id)
+                        board, rack = await extract_board_state(
+                            img_bytes, mode=ch_state.mode, gaddag=self.bot.gaddag
+                        )
+                        moves = await asyncio.to_thread(
+                            find_all_moves, board, rack, self.bot.gaddag, ch_state.mode
+                        )
+                        if moves:
+                            selected = await asyncio.to_thread(
+                                self.bot.difficulty_engine.select_move,
+                                moves,
+                                ch_state.difficulty,
+                            )
+                            candidates = [selected]
+                            for m in moves:
+                                if m is not selected and len(candidates) < 5:
+                                    candidates.append(m)
+                            accepted = await placer.place_move(candidates, rack)
+                    except Exception as exc:
+                        logger.warning("AutoPlay: re-vision retry failed — {}", exc)
 
                 # Step 5: Post turn summary embed to channel
                 if accepted and candidates:
@@ -284,10 +343,11 @@ class AutoPlayCog(commands.Cog):
             self._stop_event.clear()
             if session is not None:
                 try:
-                    await session.close()
-                except Exception:
+                    await asyncio.wait_for(session.close(), timeout=5.0)
+                except (Exception, asyncio.TimeoutError):
                     pass
             self._session = None
+            self._loop_task = None
             logger.info("AutoPlay: loop exited, resources cleaned up")
 
     # -----------------------------------------------------------------------
@@ -332,6 +392,7 @@ class AutoPlayCog(commands.Cog):
 
         Prevents orphaned browser sessions if the bot is reloaded or shut down.
         """
+        self._stop_event.set()
         if self._loop_task and not self._loop_task.done():
             self._loop_task.cancel()
             logger.info("AutoPlay: loop task cancelled on cog unload")

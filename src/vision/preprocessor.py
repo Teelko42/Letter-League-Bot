@@ -6,31 +6,36 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+from loguru import logger
 from src.vision.errors import INVALID_SCREENSHOT, VisNError
 
-# Minimum contour area (in pixels) for a detected region to be considered a board.
-# Regions smaller than this are rejected as noise or irrelevant UI elements.
-MIN_BOARD_AREA = 10_000
-
 # Maximum dimension (px) Claude Vision accepts without auto-downsampling.
-# Source: https://platform.claude.com/docs/en/build-with-claude/vision
 MAX_VISION_EDGE = 1568
 
 # Upscale factor applied after cropping to improve letter readability.
 UPSCALE_FACTOR = 2
 
-# Extra vertical padding below the detected board region, as a fraction of the
-# board height.  The player's tile rack sits just below the board on a different
-# background colour and would otherwise be cropped out.
+# Extra vertical padding below the board grid, as a fraction of the grid height.
+# The player's tile rack sits just below the board.
 RACK_PADDING_RATIO = 0.18
-
-# HSV range for Letter League board background — calibrated against real screenshots.
-# Board background is a consistent peach color: HSV ~(16, 57, 255), RGB ~(255, 229, 198).
-BOARD_HSV_LOWER = np.array([10, 30, 200])
-BOARD_HSV_UPPER = np.array([25, 80, 255])
 
 BOARD_ROWS = 19
 BOARD_COLS = 27
+
+# ---------------------------------------------------------------------------
+# Grid position fractions — sourced from CoordMapper calibration.
+# These define the board grid position as fractions of the game canvas
+# (activity iframe), calibrated at 1057×768.  They are resolution-independent.
+# ---------------------------------------------------------------------------
+GRID_X0_FRAC = 0.056820   # left edge of cell (0,0) as fraction of canvas width
+GRID_Y0_FRAC = 0.070587   # top edge of cell (0,0) as fraction of canvas height
+CELL_W_FRAC = 0.032756    # width of one cell as fraction of canvas width
+CELL_H_FRAC = 0.045038    # height of one cell as fraction of canvas height
+
+# HSV range for peach board background — used only for validation, not positioning.
+BOARD_HSV_LOWER = np.array([10, 30, 200])
+BOARD_HSV_UPPER = np.array([25, 68, 255])
+MIN_BOARD_PEACH_RATIO = 0.05  # at least 5% of grid area must be peach
 
 
 def _add_reference_markers(
@@ -38,12 +43,11 @@ def _add_reference_markers(
     board_w: int,
     board_h: int,
 ) -> Image.Image:
-    """Draw small coordinate labels at known landmark positions on the board.
+    """Draw column numbers along the top and row numbers along the left side.
 
-    Places labels at the center star (9,13) and the four Triple Word squares
-    (3,7), (3,19), (15,7), (15,19). These landmarks let the Vision API
-    calibrate its position counting without requiring every cell to be
-    individually labeled.
+    Overlays every column number (0-26) above each column and every row
+    number (0-18) to the left of each row.  Also draws a bright green
+    marker at the center star (9,13).
 
     Args:
         board_img: Cropped board image (may include rack padding below).
@@ -51,62 +55,87 @@ def _add_reference_markers(
         board_h:   Height of the board region (pixels, excluding rack area).
 
     Returns:
-        The image with reference markers drawn (mutates in-place via draw).
+        The image with coordinate labels drawn (mutates in-place via draw).
     """
     draw = ImageDraw.Draw(board_img)
 
+    cell_w = board_w / BOARD_COLS
+    cell_h = board_h / BOARD_ROWS
+    font_size = max(8, int(min(cell_w, cell_h) * 0.55))
+
     try:
-        font = ImageFont.truetype("arial.ttf", 10)
+        font = ImageFont.truetype("arial.ttf", font_size)
     except (OSError, IOError):
         font = ImageFont.load_default()
 
-    cell_w = board_w / BOARD_COLS
-    cell_h = board_h / BOARD_ROWS
+    label_color = (255, 0, 0)       # red for labels
+    outline_color = (255, 255, 255) # white outline for readability
 
-    # Landmarks: (row, col, label_text, color)
-    landmarks = [
-        (9, 13, "9,13", (0, 180, 0)),       # center — green
-        (3, 7, "3,7", (200, 0, 0)),          # TW — red
-        (3, 19, "3,19", (200, 0, 0)),
-        (15, 7, "15,7", (200, 0, 0)),
-        (15, 19, "15,19", (200, 0, 0)),
-    ]
-
-    for row, col, label, color in landmarks:
+    # Column numbers along the top — every column
+    for col in range(BOARD_COLS):
         cx = int((col + 0.5) * cell_w)
+        label = str(col)
+        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            draw.text((cx - font_size // 2 + dx, 1 + dy), label,
+                      fill=outline_color, font=font)
+        draw.text((cx - font_size // 2, 1), label, fill=label_color, font=font)
+
+    # Row numbers along the left side — every row
+    for row in range(BOARD_ROWS):
         cy = int((row + 0.5) * cell_h)
-        # Dot and coordinate label
-        r = 5
-        draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=color)
-        draw.text((cx + r + 2, cy - 6), label, fill=color, font=font)
+        label = str(row)
+        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            draw.text((1 + dx, cy - font_size // 2 + dy), label,
+                      fill=outline_color, font=font)
+        draw.text((1, cy - font_size // 2), label, fill=label_color, font=font)
+
+    # Thin gridlines at cell boundaries — helps Vision API align tiles to cells
+    grid_color = (200, 0, 0)  # faint red, visible but not overpowering
+    for col in range(BOARD_COLS + 1):
+        x = int(col * cell_w)
+        draw.line([(x, 0), (x, board_h)], fill=grid_color, width=1)
+    for row in range(BOARD_ROWS + 1):
+        y = int(row * cell_h)
+        draw.line([(0, y), (board_w, y)], fill=grid_color, width=1)
+
+    # Green crosshair at center star (9,13)
+    cx = int((13 + 0.5) * cell_w)
+    cy = int((9 + 0.5) * cell_h)
+    r = 6
+    draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=(0, 220, 0))
+    draw.line((cx - r - 3, cy, cx + r + 3, cy), fill=(0, 220, 0), width=2)
+    draw.line((cx, cy - r - 3, cx, cy + r + 3), fill=(0, 220, 0), width=2)
 
     return board_img
 
 
 def preprocess_screenshot(img_bytes: bytes) -> bytes:
-    """Detect the board region, crop to it, upscale 2x, and return PNG bytes.
+    """Crop the board grid using known position fractions, upscale, and return PNG.
+
+    Uses calibrated grid fractions (from CoordMapper) to locate the board
+    precisely within the game canvas screenshot.  This avoids HSV-based
+    detection which is prone to including non-board UI elements.
 
     Steps:
-    1. Decode bytes to a BGR numpy array via OpenCV.
-    2. Convert to HSV and apply a color mask to isolate the board background.
-    3. Find contours; select the largest by area.
-    4. Raise VisNError(INVALID_SCREENSHOT) if no contour found or area < MIN_BOARD_AREA.
-    5. Crop the original image (via Pillow) to the bounding rect of the largest contour.
-    6. Upscale the crop by UPSCALE_FACTOR using LANCZOS resampling.
-    7. Clamp to MAX_VISION_EDGE on the long edge (proportional downscale if needed).
-    8. Encode to PNG and return bytes.
+    1. Decode bytes and compute grid pixel coordinates from known fractions.
+    2. Validate that the grid region contains peach board background.
+    3. Crop to the grid region + rack padding below.
+    4. Draw coordinate reference markers at exact cell positions.
+    5. Upscale 2x with LANCZOS resampling.
+    6. Clamp to MAX_VISION_EDGE on the long edge.
+    7. Encode to PNG and return bytes.
 
     Args:
-        img_bytes: Raw image bytes (PNG, JPEG, or any format supported by OpenCV/Pillow).
+        img_bytes: Raw image bytes (PNG, JPEG, or any OpenCV/Pillow format).
 
     Returns:
         PNG-encoded bytes of the preprocessed board region.
 
     Raises:
-        VisNError: With code INVALID_SCREENSHOT if no board region is detected or the
-            detected region is too small to be a valid board.
+        VisNError: With code INVALID_SCREENSHOT if the image can't be decoded
+            or doesn't contain a recognisable board.
     """
-    # Step 1: Decode to BGR numpy array
+    # Step 1: Decode and compute grid position
     nparr = np.frombuffer(img_bytes, np.uint8)
     bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
@@ -116,74 +145,54 @@ def preprocess_screenshot(img_bytes: bytes) -> bytes:
             "Failed to decode image — file may be corrupt or an unsupported format.",
         )
 
-    # Step 2: HSV conversion and color mask
-    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(hsv, BOARD_HSV_LOWER, BOARD_HSV_UPPER)
-
-    # Step 2b: Morphological closing to merge fragmented board regions.
-    # The board background is peach but multiplier squares (blue, green, yellow)
-    # create gaps in the mask. Closing bridges these gaps into one large region.
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (50, 50))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
-
-    # Step 3: Find contours on the binary mask
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    # Step 4: Validate contour presence and minimum area
-    if not contours:
-        raise VisNError(
-            INVALID_SCREENSHOT,
-            "Board region not detected — no matching color region found. "
-            "This may not be a Letter League screenshot.",
-        )
-
-    largest = max(contours, key=cv2.contourArea)
-
-    if cv2.contourArea(largest) < MIN_BOARD_AREA:
-        raise VisNError(
-            INVALID_SCREENSHOT,
-            f"Board region too small (area={cv2.contourArea(largest):.0f}px, "
-            f"minimum={MIN_BOARD_AREA}px) — this may not be a Letter League screenshot.",
-        )
-
-    # Step 5: Crop to bounding rect + rack padding using Pillow
-    x, y, w, h = cv2.boundingRect(largest)
     img_h, img_w = bgr.shape[:2]
 
-    # Step 5a: Refine crop to match expected board aspect ratio.
-    # Letter League's 27×19 grid has approximately square cells, giving an
-    # expected aspect ratio of ~1.42.  The HSV contour often includes
-    # sidebar/UI slivers, making the bounding rect too wide.  Trim the
-    # excess width (or height) and centre the result.
-    expected_ratio = BOARD_COLS / BOARD_ROWS          # 27/19 ≈ 1.4211
-    detected_ratio = w / h if h > 0 else expected_ratio
+    # Calculate the board grid pixel coordinates from known fractions.
+    # These fractions are resolution-independent — they work at any canvas size.
+    grid_x = int(GRID_X0_FRAC * img_w)
+    grid_y = int(GRID_Y0_FRAC * img_h)
+    grid_w = int(BOARD_COLS * CELL_W_FRAC * img_w)
+    grid_h = int(BOARD_ROWS * CELL_H_FRAC * img_h)
 
-    if detected_ratio > expected_ratio * 1.03:        # wider than expected
-        new_w = int(h * expected_ratio)
-        trim = w - new_w
-        x += trim // 2
-        w = new_w
-    elif detected_ratio < expected_ratio * 0.97:      # taller than expected
-        new_h = int(w / expected_ratio)
-        trim = h - new_h
-        y += trim // 2
-        h = new_h
+    # Clamp to image bounds
+    grid_x = max(0, grid_x)
+    grid_y = max(0, grid_y)
+    grid_w = min(grid_w, img_w - grid_x)
+    grid_h = min(grid_h, img_h - grid_y)
 
-    # Extend the crop downward to include the tile rack below the board.
-    rack_pad = int(h * RACK_PADDING_RATIO)
-    crop_bottom = min(y + h + rack_pad, img_h)
+    logger.debug(
+        "Grid crop: ({},{}) {}×{} from {}×{} canvas",
+        grid_x, grid_y, grid_w, grid_h, img_w, img_h,
+    )
+
+    # Step 2: Validate — check that the grid area has enough peach background
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    grid_roi = hsv[grid_y:grid_y + grid_h, grid_x:grid_x + grid_w]
+    peach_mask = cv2.inRange(grid_roi, BOARD_HSV_LOWER, BOARD_HSV_UPPER)
+    peach_ratio = float(peach_mask.sum() / 255) / (grid_w * grid_h) if grid_w * grid_h > 0 else 0
+
+    if peach_ratio < MIN_BOARD_PEACH_RATIO:
+        raise VisNError(
+            INVALID_SCREENSHOT,
+            f"Board region not detected — peach ratio {peach_ratio:.1%} is below "
+            f"threshold {MIN_BOARD_PEACH_RATIO:.0%}. This may not be a game screenshot.",
+        )
+
+    # Step 3: Crop to grid region + rack padding
+    rack_pad = int(grid_h * RACK_PADDING_RATIO)
+    crop_bottom = min(grid_y + grid_h + rack_pad, img_h)
 
     pil_img = Image.open(BytesIO(img_bytes))
-    cropped = pil_img.crop((x, y, x + w, crop_bottom))
+    cropped = pil_img.crop((grid_x, grid_y, grid_x + grid_w, crop_bottom))
 
-    # Step 5b: Draw reference markers at known landmark positions
-    cropped = _add_reference_markers(cropped, w, h)
+    # Step 4: Draw reference markers at exact cell positions
+    cropped = _add_reference_markers(cropped, grid_w, grid_h)
 
-    # Step 6: 2x upscale with LANCZOS for quality letter readability
+    # Step 5: 2x upscale with LANCZOS
     new_w = cropped.width * UPSCALE_FACTOR
     new_h = cropped.height * UPSCALE_FACTOR
 
-    # Step 7: Clamp to MAX_VISION_EDGE on the long edge
+    # Step 6: Clamp to MAX_VISION_EDGE on the long edge
     if max(new_w, new_h) > MAX_VISION_EDGE:
         ratio = MAX_VISION_EDGE / max(new_w, new_h)
         new_w = int(new_w * ratio)
@@ -191,7 +200,17 @@ def preprocess_screenshot(img_bytes: bytes) -> bytes:
 
     upscaled = cropped.resize((new_w, new_h), Image.Resampling.LANCZOS)
 
-    # Step 8: Encode as PNG and return bytes
+    # Debug: save preprocessed image for diagnostic inspection
+    try:
+        from pathlib import Path
+        debug_path = Path("debug/preprocessed_debug.png")
+        debug_path.parent.mkdir(parents=True, exist_ok=True)
+        upscaled.save(debug_path, format="PNG")
+        logger.debug("Preprocessed debug image saved → {}", debug_path)
+    except Exception:
+        pass
+
+    # Step 7: Encode as PNG and return bytes
     buf = BytesIO()
     upscaled.save(buf, format="PNG")
     return buf.getvalue()

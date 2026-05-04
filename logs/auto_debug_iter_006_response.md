@@ -1,0 +1,7 @@
+All 23 tests pass. The change is a minimal one-line threshold adjustment plus updated docstring — the test suite mocks `_verify_placement` directly so it's unaffected.
+
+**Report**:
+
+- **Root cause hypothesis**: `_verify_placement` used a 0.15 threshold that misclassified real tile placements with diff 0.10–0.15 (placement onto plain peach cells, certain low-contrast letters) as failures. The retry then dragged from a rack slot already emptied by the successful first attempt, producing diff ~0.05–0.08, so both checks "failed" and the code raised `PlacementError` — burning a word attempt and triggering a 10-click recall. Iter 6 hit this cascade on `LEASINGS S` (0.10/0.13), `LEAVINGS V` (0.15/0.06), `EANLINGS I` (0.14/0.08), and `LIGASE A` was the only genuine failure (0.06/0.08). Repeated false-failure cascades chewed through the 50-min subprocess budget until SIGKILL.
+- **Files changed**: `src/browser/tile_placer.py` — `_verify_placement` threshold lowered from 0.15 → 0.10, docstring updated.
+- **Why next run improves**: With 0.10 cutoff, the borderline-but-real placements (0.10–0.15 range, which dominate the failure mode) now verify on the first attempt. Genuine no-op drags (0.05–0.08 from empty-rack retries) still correctly fail. This should eliminate ~80% of observed `PlacementError` cases and let words actually submit, reducing per-turn time from ~5 min (5 word attempts each cascading recall) to ~30s. Recall hitting cap is a secondary symptom that mostly disappears when placements aren't burning attempts unnecessarily.

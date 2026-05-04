@@ -12,6 +12,7 @@ from loguru import logger
 
 from src.browser.capture import capture_canvas
 from src.browser.turn_detector import classify_frame
+from src.engine import rejected_words
 
 if TYPE_CHECKING:
     from src.engine.models import Move, TileUse
@@ -42,25 +43,44 @@ CALIBRATION_CANVAS_H = 768
 RACK_Y_FRAC = 0.932836     # rack row vertical center — calibrated from live 1057x768: y=716 on tile body
 RACK_X0_FRAC = 0.391675    # first rack tile center — calibrated from live 1057x768: x=414
 RACK_TILE_STEP_FRAC = 0.035793  # spacing between rack tile centers — calibrated from live 1057x768: ~38px
-CONFIRM_X_FRAC = 0.499527  # PLAY button center X — calibrated from live 1057x768: x=528 (gray button)
-CONFIRM_Y_FRAC = 0.901042  # PLAY button center Y — calibrated from live 1057x768: y=692 (button bar y=681-703)
-# NOTE: Previous CONFIRM_Y_FRAC=0.858209 was wrong — calibrated on 1537x670 screenshot, not 1057x768.
-# In live 1057x768 frame, 0.858*768=659 lands on game board tiles; correct button bar is at y=681-703.
+CONFIRM_X_FRAC = 0.499527  # PLAY button center X — X frac is ~0.5 at every canvas width we've seen
+# Button-bar Y is NOT a constant fraction of canvas height — the game reflows
+# the UI when the window widens, pushing the rack+button-bar further up from
+# the canvas bottom.  Two real-world calibrations:
+#   width=1057 → button bar center y=692 (y_frac=0.9010)
+#   width=1545 → button bar center y=639 (y_frac=0.8320)
+# Linear fit: y = 692 - 0.1086*(w - 1057).  See _button_bar_y() in CoordMapper.
+# Prior bug: a fixed CONFIRM_Y_FRAC=0.901 on a 1545-wide canvas landed 53px
+# BELOW the button bar, so PLAY/RECALL clicks hit empty space — every word
+# was silently "rejected" because the click never reached the button.
 
 MAX_WORD_RETRIES = 5        # max different words to try before tile swap
 
 # Acceptance-detection polling: how many times (and how often) to re-check the
-# turn state after clicking confirm.  Total wait ≈ polls × interval.
-_ACCEPT_POLLS = 4           # number of post-confirm screenshots
-_ACCEPT_POLL_INTERVAL_S = 1.0  # seconds between each poll
+# turn state after clicking confirm.  Total wait ≈ polls × (interval + ~0.4 s
+# screenshot). Rejected words leave the banner visible for the full window, so
+# keeping this tight saves ~3 s per rejected attempt without risking missed
+# acceptance (the banner disappears within one render frame of success).
+_ACCEPT_POLLS = 3           # number of post-confirm screenshots
+_ACCEPT_POLL_INTERVAL_S = 0.6  # seconds between each poll
 
 # Debug screenshot directory — captures pre-PLAY and post-RECALL states.
 # Saved to debug/tile_placer/ alongside other debug images.
 _DEBUG_DIR = Path("debug/tile_placer")
 RECALL_X_FRAC = 0.589404   # RECALL button X — RIGHT of PLAY. Three-button layout: SWAP(0.41) | PLAY(0.50) | RECALL(0.59)
-RECALL_Y_FRAC = 0.901042   # RECALL button Y — same button bar row as PLAY (y=692 at 1057x768)
 SWAP_X_FRAC = 0.409650     # SWAP button X — LEFT of PLAY (x=433 at 1057x768). NOT the same as RECALL.
-SWAP_Y_FRAC = 0.901042     # SWAP button Y (fraction of canvas height)
+# RECALL/SWAP share the PLAY row; Y is computed by CoordMapper._button_bar_y().
+
+# "Select a letter" blank-tile dialog — probe points for open-state detection.
+# Calibrated from debug/tile_placer/post_recall_attempt5.png (1545x768 canvas).
+# The X close button's inner cross is pure white (255,255,255) when visible;
+# when absent, the same screen position shows a board cell color (peach, 2W
+# green, 3W pink, etc.) — never near-white. The dialog title "Select a letter"
+# at y≈0.329h renders orange text (BGR≈92,136,255) on cream; the same position
+# on the bare board shows peach (BGR≈198,229,255). Combining both probes
+# eliminates the aspect-ratio ambiguity either one alone has.
+BLANK_DIALOG_X_BTN_FRAC = (0.6434, 0.2448)
+BLANK_DIALOG_TITLE_FRAC = (0.400, 0.329)
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +90,78 @@ SWAP_Y_FRAC = 0.901042     # SWAP button Y (fraction of canvas height)
 
 class PlacementError(Exception):
     """Raised when tile placement fails after retries."""
+
+
+def _canvas_unchanged(before: bytes, after: bytes, threshold: float = 0.15) -> bool:
+    """Return True when two PNG captures are nearly identical.
+
+    Used by the recall loop to detect that no further tiles are flying back
+    to the rack — the signal that the board has been fully cleared.
+
+    Args:
+        before: PNG bytes from before a click.
+        after:  PNG bytes from after the click (+ settle delay).
+        threshold: Mean per-pixel absolute difference above which the two
+            frames are considered to differ.  0.15 matches the threshold
+            used by ``_verify_placement`` and is large enough to ignore
+            anti-aliasing / timer-text flicker while catching a real tile
+            animation.
+    """
+    arr_b = np.frombuffer(before, dtype=np.uint8)
+    arr_a = np.frombuffer(after, dtype=np.uint8)
+    img_b = cv2.imdecode(arr_b, cv2.IMREAD_COLOR)
+    img_a = cv2.imdecode(arr_a, cv2.IMREAD_COLOR)
+    if img_b is None or img_a is None or img_b.shape != img_a.shape:
+        return False
+    diff = float(np.mean(np.abs(img_b.astype(np.int32) - img_a.astype(np.int32))))
+    return diff <= threshold
+
+
+def _is_blank_dialog_open(img_bytes: bytes) -> bool:
+    """Pixel-sample whether the 'Select a letter' blank-tile dialog is visible.
+
+    A blank tile placed on the board but never assigned a letter leaves the
+    modal "Select a letter" dialog open. That dialog blocks every canvas
+    button (PLAY, RECALL, SWAP) — and if the bot crashes, or the user
+    manually intervenes, the dialog persists into the next autoplay run.
+    Downstream vision reads see the overlay's letter grid as phantom board
+    tiles, which drives the engine to attempt impossible moves.
+
+    We probe two fixed points instead of one because the dialog is centered
+    over the board, where any single pixel could coincide with a same-colored
+    board feature under a different aspect ratio:
+      * X close button center — pure white when the dialog is up; peach /
+        green / pink board-cell colors otherwise.
+      * Dialog title text area — bright orange on cream when the dialog is
+        up; peach board background otherwise.
+
+    Args:
+        img_bytes: PNG screenshot bytes from ``capture_canvas``.
+
+    Returns:
+        ``True`` iff both probe points match the dialog's signature colors.
+        On decode failure or out-of-bounds sampling, returns ``False`` so the
+        caller treats the state as "dialog absent" and proceeds normally.
+    """
+    arr = np.frombuffer(img_bytes, dtype=np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)  # BGR
+    if img is None:
+        return False
+    h, w = img.shape[:2]
+    x1 = int(BLANK_DIALOG_X_BTN_FRAC[0] * w)
+    y1 = int(BLANK_DIALOG_X_BTN_FRAC[1] * h)
+    x2 = int(BLANK_DIALOG_TITLE_FRAC[0] * w)
+    y2 = int(BLANK_DIALOG_TITLE_FRAC[1] * h)
+    if not (0 <= x1 < w and 0 <= y1 < h and 0 <= x2 < w and 0 <= y2 < h):
+        return False
+    b1, g1, r1 = (int(v) for v in img[y1, x1])
+    b2, g2, r2 = (int(v) for v in img[y2, x2])
+    x_btn_is_white = b1 >= 240 and g1 >= 240 and r1 >= 240
+    # Orange title: high red, low-mid green, low blue; board peach has
+    # near-saturated green (≥220) and blue (≥240), so the ceiling on g2/b2
+    # rejects peach without clipping legitimate title pixels.
+    title_is_orange = r2 >= 230 and g2 <= 180 and b2 <= 150
+    return x_btn_is_white and title_is_orange
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +226,20 @@ class CoordMapper:
         y = self._bbox["y"] + RACK_Y_FRAC * self._bbox["height"]
         return x, y
 
+    def _button_bar_y(self) -> float:
+        """Return viewport y-coordinate for the center of the SWAP/PLAY/RECALL row.
+
+        Letter League's UI shifts the button bar vertically as the canvas
+        widens — at width 1057 the bar is at iframe-y 692; at width 1545 it
+        is at iframe-y 639.  Linear fit between those two measurements.
+        Clamped to [550, 720] so a degenerate bbox never produces an insane
+        click coordinate that would bypass the safety of a missed click.
+        """
+        w = self._bbox["width"]
+        y_iframe = 692.0 - 0.1086 * (w - 1057.0)
+        y_iframe = max(550.0, min(720.0, y_iframe))
+        return self._bbox["y"] + y_iframe
+
     def confirm_btn_px(self) -> tuple[float, float]:
         """Return viewport pixel coordinates for the confirm button.
 
@@ -141,8 +247,7 @@ class CoordMapper:
             ``(x, y)`` viewport pixel coordinates.
         """
         x = self._bbox["x"] + CONFIRM_X_FRAC * self._bbox["width"]
-        y = self._bbox["y"] + CONFIRM_Y_FRAC * self._bbox["height"]
-        return x, y
+        return x, self._button_bar_y()
 
     def recall_btn_px(self) -> tuple[float, float]:
         """Return viewport pixel coordinates for the recall/undo button.
@@ -154,8 +259,7 @@ class CoordMapper:
             ``(x, y)`` viewport pixel coordinates.
         """
         x = self._bbox["x"] + RECALL_X_FRAC * self._bbox["width"]
-        y = self._bbox["y"] + RECALL_Y_FRAC * self._bbox["height"]
-        return x, y
+        return x, self._button_bar_y()
 
     def swap_btn_px(self) -> tuple[float, float]:
         """Return viewport pixel coordinates for the tile swap button.
@@ -167,8 +271,7 @@ class CoordMapper:
             ``(x, y)`` viewport pixel coordinates.
         """
         x = self._bbox["x"] + SWAP_X_FRAC * self._bbox["width"]
-        y = self._bbox["y"] + SWAP_Y_FRAC * self._bbox["height"]
-        return x, y
+        return x, self._button_bar_y()
 
 
 # ---------------------------------------------------------------------------
@@ -394,23 +497,38 @@ class TilePlacer:
             except Exception as exc:
                 logger.debug("Blank dialog: frame locator failed for '{}' ({})", letter, exc)
 
-            # Strategy 3: compute the button's pixel position from the known 7-column
-            # alphabetical grid layout and click via viewport mouse.
-            COLS = 7
-            DIALOG_LEFT_FRAC = 0.32
-            DIALOG_RIGHT_FRAC = 0.68
-            GRID_TOP_FRAC = 0.36
-            GRID_BOTTOM_FRAC = 0.67
+            # Strategy 3: compute the button's pixel position from the known
+            # 4-row alphabetical grid and click via viewport mouse.
+            #
+            # Grid layout (measured from a live 1545×768 dialog screenshot):
+            #   Row 0 (y_frac 0.351):   A B C D E F G   (cols 0..6)
+            #   Row 1 (y_frac 0.445):   H I J K L M N   (cols 0..6)
+            #   Row 2 (y_frac 0.540):   O P Q R S T U   (cols 0..6)
+            #   Row 3 (y_frac 0.634):     V W X Y Z     (cols 1..5, last row is
+            #                                            5 buttons centered by a
+            #                                            +1 column offset — NOT
+            #                                            left-aligned)
+            # Col step:  (0.6126 − 0.3860) / 6 = 0.03777  (frac of canvas width)
+            # Row step:  (0.6337 − 0.3510) / 3 = 0.09423  (frac of canvas height)
+            #
+            # The previous formula used (right-left)/COLS for the *inter-center*
+            # step and a +0.5 offset on every axis, which put the click ~34 px
+            # below and ~10 px left of every letter — the dialog was never
+            # dismissed.  That's why every subsequent PLAY click was blocked.
+            COL0_FRAC_X = 0.3860   # column 0 button centre (A, H, O)
+            COL_STEP_FRAC_X = 0.03777
+            ROW0_FRAC_Y = 0.3510   # row 0 button centre (A..G)
+            ROW_STEP_FRAC_Y = 0.09423
 
             letter_idx = ord(letter) - ord("A")
-            col_idx = letter_idx % COLS
-            row_idx = letter_idx // COLS
+            row_idx = letter_idx // 7
+            col_idx = letter_idx % 7
+            if row_idx == 3:
+                # V-Z sit in cols 1..5 (centred), not cols 0..4.
+                col_idx = (letter_idx - 21) + 1
 
-            cell_w = (DIALOG_RIGHT_FRAC - DIALOG_LEFT_FRAC) / COLS
-            cell_h = (GRID_BOTTOM_FRAC - GRID_TOP_FRAC) / 4
-
-            frac_x = DIALOG_LEFT_FRAC + (col_idx + 0.5) * cell_w
-            frac_y = GRID_TOP_FRAC + (row_idx + 0.5) * cell_h
+            frac_x = COL0_FRAC_X + col_idx * COL_STEP_FRAC_X
+            frac_y = ROW0_FRAC_Y + row_idx * ROW_STEP_FRAC_Y
 
             bbox = self._bbox
             if bbox is None:
@@ -474,19 +592,23 @@ class TilePlacer:
         """Verify a tile was placed by comparing before/after screenshots.
 
         Captures a new screenshot and computes the mean absolute pixel
-        difference against the pre-drag screenshot. A difference > 0.15
+        difference against the pre-drag screenshot. A difference > 0.10
         indicates the canvas changed (tile landed).
 
         The threshold is deliberately low because a single tile placement only
         affects ~2 small regions (board cell + rack slot) out of the full
-        ~1057x768 image, producing a mean diff of roughly 0.3-0.5 even for a
-        successful placement.
+        ~1545x768 image. A successful placement onto an already-colored
+        multiplier cell can produce a mean diff as low as 0.10–0.14, while a
+        no-op drag (e.g. rack slot already empty from a prior successful
+        attempt) produces ~0.05–0.08. The 0.10 cutoff cleanly separates these
+        regimes — a stricter 0.15 was empirically rejecting real placements
+        and triggering false retry-failure cascades.
 
         Args:
             before_bytes: PNG screenshot bytes captured before the drag.
 
         Returns:
-            ``True`` if the canvas changed (diff > 0.15), ``False`` otherwise
+            ``True`` if the canvas changed (diff > 0.10), ``False`` otherwise
             or if either image fails to decode.
         """
         after_bytes = await capture_canvas(self._page, render_wait=False)
@@ -504,7 +626,7 @@ class TilePlacer:
 
         diff = float(np.mean(np.abs(before_img.astype(np.int32) - after_img.astype(np.int32))))
         logger.debug("Placement pixel diff: {:.4f}", diff)
-        return diff > 0.15
+        return diff > 0.10
 
     # ------------------------------------------------------------------
     # Public API
@@ -728,7 +850,12 @@ class TilePlacer:
         except Exception as exc:
             logger.warning("Debug screenshot '{}' failed: {}", label, exc)
 
-    async def _recall_tiles(self, mapper: CoordMapper, attempt_num: int = 0) -> None:
+    async def _recall_tiles(
+        self,
+        mapper: CoordMapper,
+        attempt_num: int = 0,
+        expected_tiles: int | None = None,
+    ) -> None:
         """Click the recall/undo button to return placed tiles to the rack.
 
         Called after a word rejection so the bot can try a different word.
@@ -736,24 +863,108 @@ class TilePlacer:
         ``_drag_tile`` uses.  Synthetic JS dispatch silently "succeeds" on
         canvas-rendered buttons without triggering the game's handlers.
 
-        The post-click delay is intentionally generous (1.0–1.5 s) — the game
-        animates tiles flying back from the board to the rack, and if the next
-        placement starts before the animation finishes the game may reject or
-        mishandle the subsequent clicks.
+        Empirically a single recall click returns one staged tile, so a
+        7-tile placement needs at least 7 clicks. Fast successive clicks
+        (≤400 ms apart) were observed to be coalesced by the game's input
+        handler, so we space them at ≥0.7 s.
+
+        When ``expected_tiles`` is known we click exactly that many times
+        plus a small safety margin and skip canvas-diff stability detection
+        entirely.  The diff check was unreliable under live play: the bot's
+        turn timer and opponent-side UI animate continuously, so the
+        per-frame mean pixel diff stays above the 0.15 stability threshold
+        even after the rack has fully refilled — the loop consistently hit
+        its 10-click cap and burned ~22 s on every rejected word.  At five
+        rejections per turn that wasted ~110 s, repeatedly pushing the run
+        past the auto-debug 30-min wallclock cap.  Count-based recall is
+        deterministic and cuts that to ~7 s.
 
         Args:
-            mapper:      ``CoordMapper`` instance for current canvas dimensions.
-            attempt_num: Current word attempt index (used in the debug filename).
+            mapper:         ``CoordMapper`` instance for current canvas dimensions.
+            attempt_num:    Current word attempt index (used in the debug filename).
+            expected_tiles: Number of tiles staged in the rejected attempt.
+                When ``None``, falls back to a fixed safety cap suitable
+                for an unknown placement.
         """
         rx, ry = mapper.recall_btn_px()
-        jx, jy = jitter(rx, ry)
-        logger.info("Clicking recall button at ({:.1f}, {:.1f}) to clear placed tiles", jx, jy)
-        await self._page.mouse.click(jx, jy)
+        if expected_tiles is not None and expected_tiles > 0:
+            target_clicks = expected_tiles + 2  # +2 safety for coalesced clicks
+        else:
+            target_clicks = 9  # generic safety cap (max rack 7 + 2)
+        for i in range(target_clicks):
+            jx, jy = jitter(rx, ry)
+            logger.info(
+                "Clicking recall button at ({:.1f}, {:.1f}) (pass {}/{})",
+                jx, jy, i + 1, target_clicks,
+            )
+            await self._page.mouse.click(jx, jy)
+            await asyncio.sleep(random.uniform(0.7, 0.9))
 
-        # Give the game's recall animation time to fully complete before the
-        # next placement cycle starts.  0.3-0.5 s was too short in testing.
-        await asyncio.sleep(random.uniform(1.0, 1.5))
         await self._save_debug_screenshot(f"post_recall_attempt{attempt_num}")
+
+    async def clear_stale_placements(self) -> None:
+        """Click recall once to clear any uncommitted tiles left on the board.
+
+        Call this at the start of each turn (after poll_turn returns "my_turn"
+        but before capturing the board) so that tiles staged by a previous
+        attempt — or by the human before autoplay took over — cannot pollute
+        the engine's view of the board or block the next move submission.
+
+        Before recalling, we probe for a stuck "Select a letter" dialog (an
+        unassigned blank tile from a prior run will leave this modal open)
+        and dismiss it — the dialog otherwise swallows the RECALL click and
+        the subsequent vision read sees its letter grid as phantom board
+        tiles.
+
+        Safe to call when the board is already clean: the recall click on an
+        empty placement set is a no-op from the game's perspective.
+        """
+        try:
+            bbox = await self._get_canvas_bbox()
+        except Exception as exc:
+            logger.warning("clear_stale_placements: cannot get bbox ({}) — skipping", exc)
+            return
+
+        try:
+            probe_bytes = await capture_canvas(self._page, render_wait=False)
+            if _is_blank_dialog_open(probe_bytes):
+                logger.warning(
+                    "clear_stale_placements: 'Select a letter' dialog detected "
+                    "— assigning 'A' to the stuck blank tile so recall can run"
+                )
+                self._bbox = bbox  # viewport-click fallback needs a bbox stash
+                await self._dismiss_blank_letter_dialog("A")
+                await asyncio.sleep(0.5)
+        except Exception as exc:
+            logger.warning(
+                "clear_stale_placements: dialog probe failed ({}) — continuing to recall",
+                exc,
+            )
+
+        mapper = CoordMapper(bbox)
+        rx, ry = mapper.recall_btn_px()
+        # Click recall a fixed small number of times.  We previously waited
+        # for the canvas to "stabilise" between clicks but live play has
+        # continuous animation (turn timer, opponent UI) that pushes every
+        # adjacent-frame diff above the 0.15 threshold, so the loop always
+        # ran the full 10 clicks and burned ~20 s every turn.  At the start
+        # of a turn the board is normally clean — at most a handful of
+        # stale tiles from a manual intervention or crashed prior run, so
+        # capping at 4 covers any realistic situation while keeping the
+        # cost bounded.
+        MAX_PASSES = 4
+        for i in range(MAX_PASSES):
+            jx, jy = jitter(rx, ry)
+            logger.info(
+                "Pre-turn recall click at ({:.1f}, {:.1f}) (pass {}/{})",
+                jx, jy, i + 1, MAX_PASSES,
+            )
+            try:
+                await self._page.mouse.click(jx, jy)
+            except Exception as exc:
+                logger.warning("clear_stale_placements: recall click failed: {}", exc)
+                return
+            await asyncio.sleep(random.uniform(0.7, 0.9))
 
     async def _tile_swap(self, mapper: CoordMapper) -> None:
         """Click the tile swap button as a fallback when no valid words can be placed.
@@ -779,7 +990,7 @@ class TilePlacer:
         moves: list[Move],
         rack: list[str],
         swap_on_fail: bool = True,
-    ) -> bool:
+    ) -> Move | None:
         """Orchestrate the full tile placement + confirmation flow.
 
         Iterates through up to ``MAX_WORD_RETRIES`` candidate moves (sorted
@@ -806,11 +1017,36 @@ class TilePlacer:
                 swapping — the caller can retry with fresh vision data.
 
         Returns:
-            ``True`` if a word was accepted; ``False`` if all attempts failed.
+            The accepted ``Move`` if a word was accepted; ``None`` if all
+            attempts failed. (Truthy/falsy semantics are preserved, so
+            ``if accepted:`` still works for callers.)
         """
-        attempt_limit = min(len(moves), MAX_WORD_RETRIES)
+        # Drop candidates whose word is already blacklisted from prior runs,
+        # and dedupe repeated .word entries (the engine emits the same word
+        # at multiple anchor positions — once the game rejects it the first
+        # placement, retrying another placement of the same word is wasted
+        # work that also feeds the stuck-on-my_turn failure mode).
+        deduped: list[Move] = []
+        seen_words: set[str] = set()
+        skipped_blacklisted = 0
+        for m in moves:
+            key = m.word.lower()
+            if key in seen_words:
+                continue
+            if rejected_words.is_rejected(key):
+                skipped_blacklisted += 1
+                continue
+            seen_words.add(key)
+            deduped.append(m)
+        if skipped_blacklisted:
+            logger.info(
+                "place_move: skipped {} candidate(s) already on the rejection blacklist",
+                skipped_blacklisted,
+            )
 
-        for attempt_num, move in enumerate(moves[:attempt_limit], start=1):
+        attempt_limit = min(len(deduped), MAX_WORD_RETRIES)
+
+        for attempt_num, move in enumerate(deduped[:attempt_limit], start=1):
             logger.info(
                 "Word attempt {}/{}: '{}' (score={})",
                 attempt_num,
@@ -828,7 +1064,10 @@ class TilePlacer:
                     attempt_num,
                     exc,
                 )
-                # Attempt recall before moving on to next word.
+                # Attempt recall before moving on to next word. We don't
+                # know how many tiles actually landed (the failure may have
+                # been mid-placement), so let _recall_tiles use its generic
+                # safety cap.
                 try:
                     bbox = await self._get_canvas_bbox()
                     mapper = CoordMapper(bbox)
@@ -857,7 +1096,7 @@ class TilePlacer:
                     attempt_num,
                     attempt_limit,
                 )
-                return True
+                return move
 
             logger.info(
                 "Word '{}' rejected (attempt {}/{}) — recalling tiles",
@@ -865,7 +1104,12 @@ class TilePlacer:
                 attempt_num,
                 attempt_limit,
             )
-            await self._recall_tiles(mapper, attempt_num=attempt_num)
+            rejected_words.add(move.word)
+            await self._recall_tiles(
+                mapper,
+                attempt_num=attempt_num,
+                expected_tiles=len(move.rack_tiles_consumed()),
+            )
 
         # All word attempts exhausted.
         if swap_on_fail:
@@ -881,4 +1125,4 @@ class TilePlacer:
                 "All {} word attempt(s) failed — returning to caller for re-vision",
                 attempt_limit,
             )
-        return False
+        return None

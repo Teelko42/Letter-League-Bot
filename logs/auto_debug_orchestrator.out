@@ -1,0 +1,7 @@
+[auto_debug 16:16:40] using claude CLI at: C:\Users\Ninja\.local\bin\claude.EXE
+[auto_debug 16:16:40] === iteration 1/3 ===
+[auto_debug 16:16:40] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 5 --mode wild  (timeout=1800s)
+[auto_debug 16:22:47] run finished: exit=0  duration=367.4s  sig=bda2f727f7a3
+[auto_debug 16:22:47] Clean exit but only 1 turns observed — treating as partial and continuing.
+[auto_debug 16:22:47] wrote context bundle -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_001.md
+[auto_debug 16:22:47] invoking claude (timeout=900s, acceptEdits)

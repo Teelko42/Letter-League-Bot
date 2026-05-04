@@ -37,7 +37,7 @@ from src.browser.capture import capture_canvas
 from src.browser.navigator import navigate_to_activity
 from src.browser.session import BrowserSession
 from src.browser.tile_placer import TilePlacer
-from src.browser.turn_detector import click_start_game, poll_turn, preflight_check, wait_for_game_ready
+from src.browser.turn_detector import IframeDeadError, click_start_game, poll_turn, preflight_check, wait_for_game_ready
 from src.engine.moves import find_all_moves
 from src.vision import extract_board_state
 
@@ -211,7 +211,18 @@ class AutoPlayCog(commands.Cog):
             # ------------------------------------------------------------------
             while not self._stop_event.is_set():
                 # Step 1: Wait for our turn (or game over / idle timeout / stop)
-                turn_state = await poll_turn(page, stop_event=self._stop_event)
+                try:
+                    turn_state = await poll_turn(page, stop_event=self._stop_event)
+                except IframeDeadError as exc:
+                    logger.error("AutoPlay: iframe dead — {}", exc)
+                    await channel.send(
+                        embed=build_error_embed_generic(
+                            "Autoplay stopped: the Discord Activity iframe "
+                            "disappeared. The game window may have closed or "
+                            "the voice call dropped. Restart with `/autoplay`."
+                        )
+                    )
+                    break
                 if turn_state == "stop_requested":
                     logger.info("AutoPlay: stop requested during turn polling — exiting loop")
                     break
@@ -285,11 +296,19 @@ class AutoPlayCog(commands.Cog):
                     accepted = await placer.place_move(candidates, rack, swap_on_fail=False)
                 except Exception as exc:
                     logger.warning("AutoPlay: place_move failed — {}", exc)
-                    accepted = False
+                    accepted = None
 
-                if not accepted and candidates:
+                if not accepted:
+                    # Cover both "all candidates rejected" and "no candidates
+                    # produced" — the latter happens when vision sees stuck
+                    # tiles on the board and a near-empty rack, so
+                    # find_all_moves yields zero moves. Without a terminal
+                    # action the game stays on my_turn forever;
+                    # swap_on_fail=True forces SWAP as the last resort so the
+                    # turn actually ends.
                     logger.warning(
-                        "AutoPlay: all words rejected — retrying with fresh vision"
+                        "AutoPlay: no move accepted (candidates={}) — re-vision + swap fallback",
+                        len(candidates),
                     )
                     try:
                         img_bytes = await capture_canvas(page)
@@ -310,13 +329,15 @@ class AutoPlayCog(commands.Cog):
                             for m in moves:
                                 if m is not selected and len(candidates) < 5:
                                     candidates.append(m)
-                            accepted = await placer.place_move(candidates, rack)
+                        else:
+                            candidates = []
+                        accepted = await placer.place_move(candidates, rack, swap_on_fail=True)
                     except Exception as exc:
                         logger.warning("AutoPlay: re-vision retry failed — {}", exc)
 
                 # Step 5: Post turn summary embed to channel
-                if accepted and candidates:
-                    await channel.send(embed=build_turn_embed(candidates[0], self._state.turn_count))
+                if accepted:
+                    await channel.send(embed=build_turn_embed(accepted, self._state.turn_count))
                 else:
                     await channel.send(embed=build_swap_embed(self._state.turn_count))
 

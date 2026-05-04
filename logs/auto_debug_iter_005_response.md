@@ -1,0 +1,7 @@
+## Report
+
+**Root cause hypothesis:** In iteration 5, one whole turn was skipped because `extract_board_state` failed validation with "Invalid rack tile ' L'", "' F'", … — the Vision API returned all 7 rack letters padded with a leading space. The validator at `src/vision/validator.py:516` checks rack chars against a strict A-Z+'?' set, and "Invalid rack tile" is classified as a *hard* error (`src/vision/__init__.py:253`), so the floating-tile / soft-error recovery branch was bypassed and the turn was skipped. The dominant rest-of-run failure (5/5 word rejections falling back to swap) is a dictionary-mismatch issue that the existing blacklist is grinding down on its own — not actionable in one iteration.
+
+**Files changed:** `src/vision/__init__.py` — added `_normalize_letters()` and called it after each `_strip_empty_cells()` to `.strip().upper()` cell letters and rack tiles in place. No other changes.
+
+**Why the next run should do better:** Future Vision responses with the same whitespace quirk will now be normalized before the validator runs, eliminating the "Invalid rack tile" hard-error category. That converts the failure mode from "skip the entire turn" into a clean extraction (or, if the floating-tile signal is independently real, into the existing soft-error recovery path that strips floaters and proceeds). All 45 tests in `tests/vision/` and `tests/test_tile_placer.py` still pass.

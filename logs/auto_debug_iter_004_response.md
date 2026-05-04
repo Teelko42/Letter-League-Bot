@@ -1,0 +1,7 @@
+## Report
+
+**Root cause hypothesis:** This was not actually a failure — the autoplay subprocess exited 0 after playing all 5 requested turns (DEWIER, NEG, TAG, swap, RUNNEL) and emitted "Reached max_turns=5 — exiting cleanly". The bug is in the orchestrator (`scripts/auto_debug.py`) success heuristic: it counted "Turn N: played" lines from `error_lines`, which is just the last 30 log lines. Each tile placement logs ~6 lines and takes 3–4s, so 5 placements per turn fill the entire window — only the final turn's "Turn N:" line shows up. With `clean=1 < min_clean_turns=3` and `5 <= 1+1` false, the orchestrator misclassified a complete success as partial and burned an iteration. Last iteration shared the same signature for the same reason.
+
+**Files changed:** `scripts/auto_debug.py` — added `_count_clean_turns()` that scans the *full* per-run log slice for "Turn N:" markers and the terminal sentinels (`Reached max_turns=`, `Game over after`, `Stop requested`, `Idle timeout`); plumbed `clean_turns` and `reached_terminal_marker` into `RunResult`; updated `main()` to declare success when the terminal marker is seen, the per-run quota was hit, or `clean_turns >= min_clean_turns`.
+
+**Why next run will do better:** With this fix, the same successful 5-turn run will now report `clean_turns=5` and `reached_terminal_marker=True`, hit the SUCCESS branch, and stop the loop instead of triggering a fifth wasted iteration. No game-logic, vision, or browser code was touched — those layers worked correctly this run.

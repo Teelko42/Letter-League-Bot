@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import time
+from collections import Counter
 from typing import TYPE_CHECKING
 
 from loguru import logger
@@ -63,6 +64,45 @@ def _remove_floating_tiles(data: dict, floating_errors: list[str]) -> None:
         ]
 
 
+def _strip_empty_cells(data: dict) -> None:
+    """Drop cells with empty letter strings from extraction data in-place.
+
+    Claude Vision sometimes returns the center-star position as a cell with
+    letter="" to acknowledge "I see the star here, no tile on it".  Keeping
+    such cells breaks downstream assumptions: the validator flags them as
+    invalid letters, and the retry-merge logic re-adds them on every pass.
+    The board population step already skips empty-letter cells, so dropping
+    them here is a strict no-op for legitimate extractions.
+    """
+    cells = data.get("board", {}).get("cells", [])
+    filtered = [c for c in cells if c.get("letter")]
+    if len(filtered) != len(cells):
+        data["board"]["cells"] = filtered
+
+
+def _normalize_letters(data: dict) -> None:
+    """Normalize letter strings on board cells and rack tiles in-place.
+
+    The Vision API occasionally pads single-letter strings with leading or
+    trailing whitespace ("' L'", "' F'") and rarely returns lowercase.  The
+    validator's character-set check is strict (A-Z plus '?'), so these
+    cosmetic artefacts are reported as "Invalid rack tile" / "Invalid letter"
+    — *hard* errors that block the floating-tile / soft-error recovery path
+    and force the turn to be skipped entirely.  Stripping + upper-casing
+    here is a no-op for clean extractions.
+    """
+    for cell in data.get("board", {}).get("cells", []):
+        letter = cell.get("letter", "")
+        if isinstance(letter, str):
+            cell["letter"] = letter.strip().upper()
+    rack = data.get("rack")
+    if isinstance(rack, list):
+        data["rack"] = [
+            tile.strip().upper() if isinstance(tile, str) else tile
+            for tile in rack
+        ]
+
+
 __all__ = [
     "extract_board_state",
     "VisNError",
@@ -120,6 +160,14 @@ async def extract_board_state(
     logger.info("Extraction complete (first attempt)")
     _log_extracted_state(data)
 
+    # Strip cells with empty letters — Claude Vision occasionally reports the
+    # center-star cell (9,13) as a cell with letter="".  Board.place_tile
+    # already skips such cells, but validation flags them as "Invalid letter
+    # ''", and the retry-merge logic re-adds them to every subsequent pass,
+    # causing a hard validation failure for every turn.
+    _strip_empty_cells(data)
+    _normalize_letters(data)
+
     # ------------------------------------------------------------------
     # Step 3: Auto-correct positions & Validate
     # ------------------------------------------------------------------
@@ -143,42 +191,80 @@ async def extract_board_state(
         # Preserving it lets the engine know there's a tile at that position
         # (critical for cross-word validation).
         first_attempt_cells = [dict(c) for c in data["board"]["cells"]]
+        first_attempt_rack = list(data["rack"])
 
-        retry_context = "\n".join(errors)
-        logger.warning(
-            "Validation failed ({} errors), retrying: {}",
-            len(errors),
-            errors,
-        )
-        data = await call_vision_api(processed_bytes, retry_context=retry_context)
-        logger.info("Extraction complete (retry)")
-        _log_extracted_state(data)
-        correct_positions(data)
-        correct_positions_center_star(data)
-        if gaddag is not None:
-            correct_positions_gaddag(data, gaddag)
+        # Strip "Rack is empty" from retry context.  Telling Claude the rack
+        # must have ≥1 tile pressures it to invent rack letters by copying
+        # from the board — an observed failure mode where a genuinely-empty
+        # rack (end-of-game or all-tiles-just-consumed state) gets replaced
+        # by phantom tiles that the engine then tries and fails to play.
+        retry_errors = [e for e in errors if "Rack is empty" not in e]
 
-        # Merge back cells that the retry dropped.  The first attempt often
-        # identifies the correct number of tiles even if it misreads a letter;
-        # the retry may drop that tile to satisfy word validation, losing the
-        # position entirely.  Re-adding the cell ensures the engine checks
-        # cross-words at that column/row.
-        retry_positions = {(c["row"], c["col"]) for c in data["board"]["cells"]}
-        dropped = [c for c in first_attempt_cells if (c["row"], c["col"]) not in retry_positions]
-        if dropped:
-            for cell in dropped:
-                data["board"]["cells"].append(cell)
-            logger.info(
-                "Merged {} cell(s) from first attempt that retry dropped: {}",
-                len(dropped),
-                [(c["letter"], c["row"], c["col"]) for c in dropped],
+        if retry_errors:
+            retry_context = "\n".join(retry_errors)
+            logger.warning(
+                "Validation failed ({} errors), retrying: {}",
+                len(errors),
+                errors,
             )
+            data = await call_vision_api(processed_bytes, retry_context=retry_context)
+            logger.info("Extraction complete (retry)")
+            _log_extracted_state(data)
+            _strip_empty_cells(data)
+            _normalize_letters(data)
+            correct_positions(data)
+            correct_positions_center_star(data)
+            if gaddag is not None:
+                correct_positions_gaddag(data, gaddag)
 
-        errors = validate_extraction(data, gaddag=gaddag)
-        logger.info(
-            "Validation result after retry — {} error(s)",
-            len(errors),
-        )
+            # Merge back cells that the retry dropped.  The first attempt often
+            # identifies the correct number of tiles even if it misreads a letter;
+            # the retry may drop that tile to satisfy word validation, losing the
+            # position entirely.  Re-adding the cell ensures the engine checks
+            # cross-words at that column/row.
+            retry_positions = {(c["row"], c["col"]) for c in data["board"]["cells"]}
+            dropped = [c for c in first_attempt_cells if (c["row"], c["col"]) not in retry_positions]
+            if dropped:
+                for cell in dropped:
+                    data["board"]["cells"].append(cell)
+                logger.info(
+                    "Merged {} cell(s) from first attempt that retry dropped: {}",
+                    len(dropped),
+                    [(c["letter"], c["row"], c["col"]) for c in dropped],
+                )
+
+            # Hallucination guard: if the first attempt saw an empty rack but
+            # the retry returned tiles drawn entirely from the board's letter
+            # multiset, treat the retry rack as invented and reset to empty.
+            # Real rack tiles come from the bag and will not perfectly match
+            # what's already on the board — this pattern is Claude papering
+            # over the "missing rack" hint by re-reading board letters.
+            if not first_attempt_rack and data["rack"]:
+                board_counts: Counter[str] = Counter(
+                    c["letter"] for c in data["board"]["cells"]
+                )
+                rack_counts: Counter[str] = Counter(data["rack"])
+                if all(
+                    rack_counts[l] <= board_counts.get(l, 0)
+                    for l in rack_counts
+                ):
+                    logger.warning(
+                        "Retry rack {} appears hallucinated from board "
+                        "letters — discarding and treating rack as empty",
+                        data["rack"],
+                    )
+                    data["rack"] = []
+
+            errors = validate_extraction(data, gaddag=gaddag)
+            logger.info(
+                "Validation result after retry — {} error(s)",
+                len(errors),
+            )
+        else:
+            logger.info(
+                "Skipping retry — only error is empty rack (soft). "
+                "Proceeding with first-attempt extraction."
+            )
         if errors:
             # Categorise errors by severity — some are recoverable.
             floating_errors = [e for e in errors if "Floating tile" in e]

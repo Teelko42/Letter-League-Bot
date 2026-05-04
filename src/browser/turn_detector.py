@@ -53,14 +53,35 @@ IDLE_THRESHOLD_S = 30.0
 # Maximum seconds to poll "not my turn" before returning idle_timeout.
 MAX_IDLE_S = 300.0  # 5 minutes
 
+# After this many consecutive capture_canvas failures, poll_turn gives up
+# and raises IframeDeadError so the caller can re-launch the activity.
+# When the iframe is truly dead each attempt costs ~30s wait_for + 30s
+# diagnostic ≈ 60s, so 3 failures ≈ 3 minutes — enough to ride out a
+# transient blip, fast enough to recover before the autoplay subprocess
+# timeout fires (lowered from 5 after iter_001 hit the timeout).
+MAX_CAPTURE_FAILURES = 3
+
+
+class IframeDeadError(RuntimeError):
+    """Raised by poll_turn when the game iframe is unreachable.
+
+    Signals that the Discord Activity iframe has gone away (activity closed,
+    voice call dropped, Discord re-rendered the shelf). The caller should
+    re-navigate and re-ensure the game is started before resuming polling.
+    """
+
 # Seconds to wait for the game board to appear during startup.
 GAME_READY_TIMEOUT_S = 60.0
 GAME_READY_POLL_S = 2.0
 
 # START GAME button fractional position within the canvas/iframe.
-# Calibrated from title screen screenshot — button is bottom-right of canvas.
-START_GAME_X_FRAC = 0.935
-START_GAME_Y_FRAC = 0.957
+# Re-calibrated 2026-04-21 from debug/menu_screen.png — contour-detected
+# button bbox spans (0.764-0.981, 0.900-0.981); center at (0.872, 0.940).
+# The previous values (0.935, 0.957) landed near the rounded right edge of
+# the pill and sometimes missed when iframe dimensions differed from the
+# calibration screenshot.
+START_GAME_X_FRAC = 0.872
+START_GAME_Y_FRAC = 0.940
 
 # Title screen sidebar detection.
 # The title/lobby screen has a distinctive large orange/salmon sidebar
@@ -341,11 +362,31 @@ async def click_start_game(page: Any) -> None:
         logger.warning("click_start_game: iframe not found — skipping")
         return
 
-    x = bbox["x"] + START_GAME_X_FRAC * bbox["width"]
-    y = bbox["y"] + START_GAME_Y_FRAC * bbox["height"]
+    # Position relative to the iframe's top-left corner (CSS px). Using the
+    # locator's own click() keeps Playwright's hit-testing inside the iframe
+    # element and is DPR-safe.
+    pos_x = START_GAME_X_FRAC * bbox["width"]
+    pos_y = START_GAME_Y_FRAC * bbox["height"]
+    abs_x = bbox["x"] + pos_x
+    abs_y = bbox["y"] + pos_y
 
-    logger.info("Clicking START GAME button at ({:.1f}, {:.1f})", x, y)
-    await page.mouse.click(x, y)
+    logger.info(
+        "Clicking START GAME button at iframe-relative ({:.1f}, {:.1f}) / page ({:.1f}, {:.1f})",
+        pos_x, pos_y, abs_x, abs_y,
+    )
+    # Hover-then-click sequence — some Discord overlays only respond after a
+    # mousemove event lands on the target.
+    try:
+        await page.mouse.move(abs_x, abs_y, steps=8)
+        await asyncio.sleep(0.15)
+        await iframe_locator.click(
+            position={"x": pos_x, "y": pos_y},
+            timeout=10_000,
+            force=True,
+        )
+    except Exception as exc:
+        logger.warning("click_start_game: locator click failed ({}), falling back to mouse.click", exc)
+        await page.mouse.click(abs_x, abs_y)
 
     # Wait for the title screen sidebar to disappear, confirming the game
     # has actually started.  The title screen has a distinctive orange sidebar
@@ -365,6 +406,129 @@ async def click_start_game(page: Any) -> None:
             logger.warning("click_start_game: capture failed on poll {}: {}", i, exc)
 
     logger.warning("click_start_game: game did not transition after clicking — continuing anyway")
+
+
+async def ensure_game_started(
+    page: Any,
+    max_attempts: int = 4,
+    splash_timeout_s: float = 30.0,
+) -> TurnState:
+    """Drive the activity into a running game regardless of current screen.
+
+    Handles three pre-game states idempotently:
+
+    - **Splash / loading screen**: blank or low-variance frames where neither
+      the lobby sidebar nor a banner is visible. Waits up to
+      ``splash_timeout_s`` for it to clear.
+    - **Lobby / title screen**: detected by the orange sidebar. Clicks the
+      START GAME button, waits for the sidebar to disappear, then verifies a
+      gameplay banner appears. Retries up to ``max_attempts`` times.
+    - **Game already in progress**: detected by ``my_turn`` / ``not_my_turn``
+      banners. Returns immediately without clicking anything.
+
+    Required before entering the turn loop for single-player autoplay, where
+    the headless runner cannot assume a game has been started by a human.
+
+    Args:
+        page: A patchright Page object.
+        max_attempts: Start-game click retries before giving up.
+        splash_timeout_s: Max seconds to wait for a splash screen to clear.
+
+    Returns:
+        The first observed gameplay ``TurnState`` (``"my_turn"`` or
+        ``"not_my_turn"``).
+
+    Raises:
+        RuntimeError: If no gameplay frame is observed after retries.
+    """
+    from src.browser.capture import capture_canvas  # local import avoids circular ref
+
+    # --- Step 1: wait out any splash/loading screen -----------------------
+    splash_elapsed = 0.0
+    while splash_elapsed < splash_timeout_s:
+        try:
+            img_bytes = await capture_canvas(page)
+        except Exception as exc:
+            logger.warning("ensure_game_started: capture failed on splash wait: {}", exc)
+            await asyncio.sleep(2.0)
+            splash_elapsed += 2.0
+            continue
+
+        bgr = _decode_bgr(img_bytes)
+        if bgr is not None:
+            std = float(np.std(bgr))
+            # A real screen (splash logo, lobby, or game) has std well above 20.
+            # Pure loading blanks or partly-rendered frames sit below that.
+            if std > 20.0 and (_is_title_screen(img_bytes) or _has_board(img_bytes)):
+                break
+        await asyncio.sleep(1.5)
+        splash_elapsed += 1.5
+    else:
+        raise RuntimeError(
+            f"ensure_game_started: splash never cleared after {splash_timeout_s:.0f}s"
+        )
+
+    # --- Step 2: click START GAME until we see gameplay -------------------
+    for attempt in range(1, max_attempts + 1):
+        try:
+            img_bytes = await capture_canvas(page)
+        except Exception as exc:
+            logger.warning(
+                "ensure_game_started: capture failed (attempt {}): {}", attempt, exc
+            )
+            await asyncio.sleep(2.0)
+            continue
+
+        state = classify_frame(img_bytes)
+
+        # Already in a running game — done.
+        if state in ("my_turn", "not_my_turn"):
+            logger.info("ensure_game_started: game already in progress ({})", state)
+            return state
+
+        # Lobby screen — click START GAME and verify transition.
+        if _is_title_screen(img_bytes):
+            logger.info(
+                "ensure_game_started: lobby detected — clicking START GAME (attempt {}/{})",
+                attempt, max_attempts,
+            )
+            _save_debug_screenshot(img_bytes, label=f"pre_start_attempt{attempt}")
+            await click_start_game(page)
+
+            # Poll for up to ~15s looking for a gameplay banner.
+            for _ in range(10):
+                await asyncio.sleep(1.5)
+                try:
+                    img_bytes = await capture_canvas(page)
+                except Exception:
+                    continue
+                next_state = classify_frame(img_bytes)
+                if next_state in ("my_turn", "not_my_turn"):
+                    logger.info(
+                        "ensure_game_started: game started — initial state: {}", next_state
+                    )
+                    return next_state
+            logger.warning(
+                "ensure_game_started: no banner after click (attempt {})", attempt,
+            )
+            continue
+
+        # Neither lobby nor gameplay — probably a loading transition. Wait.
+        logger.info(
+            "ensure_game_started: ambiguous frame (state={}) — waiting then retry",
+            state,
+        )
+        await asyncio.sleep(2.0)
+
+    # Exhausted retries.
+    try:
+        img_bytes = await capture_canvas(page)
+        _save_debug_screenshot(img_bytes, label="ensure_game_started_fail")
+    except Exception:
+        pass
+    raise RuntimeError(
+        f"ensure_game_started: failed to enter gameplay after {max_attempts} attempts"
+    )
 
 
 async def poll_turn(
@@ -417,6 +581,7 @@ async def poll_turn(
     last_state: TurnState | None = None
     idle_duration: float = 0.0
     capture_backoff: float = 1.0  # Seconds between retry attempts on failure
+    capture_failures: int = 0  # Consecutive capture failures; resets on success
     game_seen: bool = False  # True once we've seen my_turn or not_my_turn
 
     while True:
@@ -437,9 +602,20 @@ async def poll_turn(
         try:
             img_bytes = await capture_canvas(page)
             capture_backoff = 1.0  # Reset backoff on success
+            capture_failures = 0
         except Exception as exc:
+            capture_failures += 1
+            if capture_failures >= MAX_CAPTURE_FAILURES:
+                logger.error(
+                    "poll_turn: {} consecutive capture failures — iframe is dead, giving up",
+                    capture_failures,
+                )
+                raise IframeDeadError(
+                    f"Activity iframe unreachable after {capture_failures} attempts"
+                ) from exc
             logger.warning(
-                "capture_canvas failed (will retry in {:.1f}s): {}", capture_backoff, exc
+                "capture_canvas failed ({}/{}, retry in {:.1f}s): {}",
+                capture_failures, MAX_CAPTURE_FAILURES, capture_backoff, exc,
             )
             stopped = await _interruptible_sleep(capture_backoff)
             if stopped:

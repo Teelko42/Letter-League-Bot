@@ -16,6 +16,18 @@ from src.browser.tile_placer import CoordMapper, PlacementError, TilePlacer
 from src.engine.models import Move, ScoreBreakdown, TileUse
 
 
+@pytest.fixture(autouse=True)
+def _isolate_rejected_words(tmp_path, monkeypatch):
+    """Point rejected_words at an empty temp file so test words never appear
+    pre-blacklisted from prior real-game runs."""
+    from src.engine import rejected_words
+
+    rejected_words.configure(tmp_path / "rejected.txt")
+    yield
+    # Reset to default after each test
+    rejected_words.configure(rejected_words.DEFAULT_PATH)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -202,7 +214,7 @@ class TestPlaceMove:
         ):
             result = await placer.place_move([move], ["A", "B"])
 
-        assert result is True
+        assert result is not None
 
     @pytest.mark.asyncio
     async def test_place_move_rejected_then_accepted(self):
@@ -222,7 +234,7 @@ class TestPlaceMove:
         ):
             result = await placer.place_move([move1, move2], ["A", "B", "C", "D"])
 
-        assert result is True
+        assert result is not None
 
     @pytest.mark.asyncio
     async def test_place_move_all_rejected_tile_swap(self):
@@ -241,8 +253,65 @@ class TestPlaceMove:
         ):
             result = await placer.place_move([move], ["A", "B"])
 
-        assert result is False
+        assert result is None
         mock_swap.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_place_move_dedupes_repeated_word(self):
+        """Same word at multiple board positions is only tried once —
+        once rejected, subsequent placements of the identical word are
+        skipped rather than replayed."""
+        placer, _ = _make_placer()
+        # Same word "KEEF" at four distinct anchor positions plus one
+        # alternate word "FAKE".
+        keef1 = _make_move("KEEF", "H", _h_tiles("KEEF", row=9, start_col=10))
+        keef2 = _make_move("KEEF", "H", _h_tiles("KEEF", row=9, start_col=11))
+        keef3 = _make_move("KEEF", "H", _h_tiles("KEEF", row=9, start_col=12))
+        keef4 = _make_move("KEEF", "H", _h_tiles("KEEF", row=9, start_col=13))
+        fake = _make_move("FAKE", "H", _h_tiles("FAKE", row=9, start_col=12))
+
+        with (
+            patch.object(placer, "place_tiles", new_callable=AsyncMock) as mock_place_tiles,
+            patch.object(placer, "_get_canvas_bbox", new_callable=AsyncMock, return_value=BBOX),
+            patch.object(placer, "_click_confirm", new_callable=AsyncMock),
+            patch.object(placer, "_wait_for_acceptance", new_callable=AsyncMock, return_value=False),
+            patch.object(placer, "_recall_tiles", new_callable=AsyncMock),
+            patch.object(placer, "_tile_swap", new_callable=AsyncMock),
+            patch("src.browser.tile_placer.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            await placer.place_move([keef1, keef2, keef3, keef4, fake], ["K", "E", "E", "F", "F", "A"])
+
+        # Only two distinct words, so place_tiles should run twice total —
+        # once for KEEF, once for FAKE — regardless of how many KEEF variants
+        # were in the candidate list.
+        assert mock_place_tiles.call_count == 2
+        played_words = [c.args[0].word for c in mock_place_tiles.call_args_list]
+        assert played_words == ["KEEF", "FAKE"]
+
+    @pytest.mark.asyncio
+    async def test_place_move_skips_prebaklisted_words(self):
+        """Candidates whose word is already in the rejected_words blacklist
+        are filtered out before any placement attempt."""
+        from src.engine import rejected_words
+
+        placer, _ = _make_placer()
+        blocked = _make_move("ZZZ", "H", _h_tiles("ZZZ", row=0, start_col=0))
+        playable = _make_move("CAT", "H", _h_tiles("CAT", row=0, start_col=0))
+
+        rejected_words.add("zzz")
+
+        with (
+            patch.object(placer, "place_tiles", new_callable=AsyncMock) as mock_place_tiles,
+            patch.object(placer, "_get_canvas_bbox", new_callable=AsyncMock, return_value=BBOX),
+            patch.object(placer, "_click_confirm", new_callable=AsyncMock),
+            patch.object(placer, "_wait_for_acceptance", new_callable=AsyncMock, return_value=True),
+            patch("src.browser.tile_placer.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            result = await placer.place_move([blocked, playable], ["Z", "Z", "Z", "C", "A", "T"])
+
+        assert result is not None
+        assert result.word == "CAT"
+        assert mock_place_tiles.call_count == 1
 
     @pytest.mark.asyncio
     async def test_place_move_placement_error_continues(self):
@@ -271,7 +340,7 @@ class TestPlaceMove:
         ):
             result = await placer.place_move([move1, move2], ["A", "B", "C", "D"])
 
-        assert result is True
+        assert result is not None
 
 
 class TestBlankTileDialog:
@@ -400,7 +469,7 @@ class TestBlankTileDialog:
         ):
             result = await placer.place_move([move], ["A", "B"])
 
-        assert result is False
+        assert result is None
         mock_swap.assert_called_once()
 
     @pytest.mark.asyncio

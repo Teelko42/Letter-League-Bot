@@ -31,12 +31,23 @@ async def navigate_to_activity(
         RuntimeError: If the Activity iframe does not appear within 30 seconds on
             the final retry attempt.
     """
-    last_exc: Exception | None = None
+    last_exc: BaseException | None = None
+
+    # Hard ceiling per attempt: a normal navigation finishes in well under a
+    # minute, but iter_003 observed `_run_navigation` hanging silently for
+    # ~30 minutes between page.goto() and the next Playwright call after the
+    # browser had wedged. asyncio.wait_for converts those hangs into a
+    # TimeoutError that the retry loop can recover from instead of letting
+    # them eat the entire run budget.
+    PER_ATTEMPT_TIMEOUT_S = 120.0
 
     for attempt in range(1, max_retries + 1):
         try:
-            return await _run_navigation(page, channel_url)
-        except Exception as exc:
+            return await asyncio.wait_for(
+                _run_navigation(page, channel_url),
+                timeout=PER_ATTEMPT_TIMEOUT_S,
+            )
+        except (Exception, asyncio.TimeoutError) as exc:
             last_exc = exc
             if attempt < max_retries:
                 logger.warning(

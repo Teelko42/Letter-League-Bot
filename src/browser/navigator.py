@@ -28,24 +28,34 @@ async def navigate_to_activity(
         A patchright Frame object for the discordsays.com Activity iframe.
 
     Raises:
-        RuntimeError: If the Activity iframe does not appear within 30 seconds on
+        RuntimeError: If the Activity iframe does not appear within 60 seconds on
             the final retry attempt.
     """
     last_exc: BaseException | None = None
 
-    # Hard ceiling per attempt: a normal navigation finishes in well under a
-    # minute, but iter_003 observed `_run_navigation` hanging silently for
-    # ~30 minutes between page.goto() and the next Playwright call after the
-    # browser had wedged. asyncio.wait_for converts those hangs into a
-    # TimeoutError that the retry loop can recover from instead of letting
-    # them eat the entire run budget.
-    PER_ATTEMPT_TIMEOUT_S = 120.0
+    # Per-attempt ceiling — Playwright can hang silently if the browser wedges;
+    # wait_for converts that into a TimeoutError the retry loop can recover from.
+    per_attempt_timeout_s = 120.0
 
     for attempt in range(1, max_retries + 1):
         try:
+            # On retry, force a reload — Discord's SPA can hold stale
+            # activity-shelf state that page.goto(same_url) won't clear.
+            if attempt > 1:
+                try:
+                    await asyncio.wait_for(
+                        page.reload(wait_until="domcontentloaded"),
+                        timeout=20.0,
+                    )
+                    logger.info("Hard-reloaded page before retry {}", attempt)
+                    await asyncio.sleep(2)
+                except Exception as reload_exc:
+                    logger.warning(
+                        "Page reload before retry {} failed: {}", attempt, reload_exc
+                    )
             return await asyncio.wait_for(
                 _run_navigation(page, channel_url),
-                timeout=PER_ATTEMPT_TIMEOUT_S,
+                timeout=per_attempt_timeout_s,
             )
         except (Exception, asyncio.TimeoutError) as exc:
             last_exc = exc
@@ -157,21 +167,67 @@ async def _run_navigation(page: Any, channel_url: str) -> Any:
     await result.click(force=True, timeout=10_000)
     logger.info("Selected Letter League from shelf")
 
-    # Click the "Play" button if it appears (not shown when game already exists)
-    play_btn = page.locator('button:has-text("Play")')
+    # Settle for SPA re-render — wait_for can race with the launcher card mount.
+    await asyncio.sleep(2)
+
+    # Click the launcher button if it appears (not shown when game already
+    # exists). Discord varies the label by activity state: "Play" for fresh
+    # launches; "Launch", "Start Activity", "Resume", or "Join Activity" when a
+    # previous session is winding down or has ended.
+    launcher_selectors = (
+        'button:has-text("Play")',
+        'button:has-text("Launch")',
+        'button:has-text("Start Activity")',
+        'button:has-text("Resume")',
+        'button:has-text("Join Activity")',
+    )
+
+    async def _try_click_launcher() -> bool:
+        """Best-effort click on whichever launcher button is currently visible."""
+        for sel in launcher_selectors:
+            loc = page.locator(sel).first
+            try:
+                if await loc.is_visible():
+                    await loc.click(force=True, timeout=3_000)
+                    logger.info("Clicked launcher button: {}", sel)
+                    return True
+            except Exception as click_exc:
+                logger.debug("Launcher click on {} failed: {}", sel, click_exc)
+                continue
+        return False
+
+    launcher_btn = page.locator(launcher_selectors[0])
+    for _sel in launcher_selectors[1:]:
+        launcher_btn = launcher_btn.or_(page.locator(_sel))
     try:
-        await play_btn.wait_for(state="visible", timeout=5_000)
-        await play_btn.click()
-        logger.info("Clicked Play — launching activity")
-    except Exception:
-        logger.info("No Play button — game may already be launching")
+        await launcher_btn.wait_for(state="visible", timeout=8_000)
+        if not await _try_click_launcher():
+            # wait_for matched but every individual selector reported
+            # not-visible — fall back to clicking .first directly so we at
+            # least try something.
+            await launcher_btn.first.click(force=True, timeout=3_000)
+            logger.info("Clicked launcher button — launching activity (fallback)")
+    except Exception as exc:
+        # Log the exception type so it's clear whether wait_for timed out,
+        # the frame detached, or the click raised.
+        logger.info(
+            "No launcher button — game may already be launching ({}: {})",
+            type(exc).__name__, exc,
+        )
 
     # ------------------------------------------------------------------
     # Step 5: Wait for the Activity iframe (discordsays.com)
     # ------------------------------------------------------------------
-    deadline = 30  # seconds
+    # Cold-start can take >30s when Discord has to spin up a new activity
+    # session (especially right after a previous session ended). Give it
+    # more time before declaring failure.
+    deadline = 60  # seconds
     poll_interval = 0.5
     elapsed = 0.0
+    # Periodically re-click the launcher: the initial click can land before
+    # the button finishes mounting, leaving us waiting on an iframe Discord
+    # never spawned.
+    last_relaunch_at = 0.0
 
     while elapsed < deadline:
         for frame in page.frames:
@@ -179,10 +235,32 @@ async def _run_navigation(page: Any, channel_url: str) -> Any:
                 logger.info("Activity iframe found: {}", frame.url)
                 await _hide_chat_panel(page)
                 return frame
+        if elapsed - last_relaunch_at >= 15:
+            try:
+                if await _try_click_launcher():
+                    logger.info("Re-clicked launcher mid-wait (iframe still absent)")
+            except Exception as relaunch_exc:
+                logger.debug("Mid-wait launcher retry failed: {}", relaunch_exc)
+            last_relaunch_at = elapsed
         await asyncio.sleep(poll_interval)
         elapsed += poll_interval
 
-    raise RuntimeError("Activity iframe did not appear within 30 seconds")
+    # Dump all frame URLs to disambiguate "iframe loaded under an unexpected
+    # URL pattern" from "iframe never loaded at all".
+    try:
+        frame_urls = [getattr(f, "url", "<no-url>") for f in page.frames]
+        logger.error(
+            "Iframe wait timed out after {}s. Page frames ({}): {}",
+            deadline,
+            len(frame_urls),
+            frame_urls,
+        )
+    except Exception as exc:
+        logger.error("Iframe wait timed out and frame dump failed: {}", exc)
+
+    raise RuntimeError(
+        f"Activity iframe did not appear within {deadline} seconds"
+    )
 
 
 async def _hide_chat_panel(page: Any) -> None:

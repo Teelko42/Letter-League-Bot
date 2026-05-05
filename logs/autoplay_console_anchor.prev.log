@@ -1,0 +1,698 @@
+[32m14:38:53[0m | [1mINFO   [0m | Loading GADDAG from C:\Github\Letter-League-Bot\data\wordlist.txt (cache: C:\Github\Letter-League-Bot\cache\gaddag.pkl)
+[32m14:38:56[0m | [1mINFO   [0m | Engine ready. Mode=wild, max_turns=10
+[32m14:39:05[0m | [1mINFO   [0m | Browser up — navigating to https://discord.com/channels/1486201751353819208/1486201752477761590
+[32m14:39:05[0m | [1mINFO   [0m | Navigated to channel: https://discord.com/channels/1486201751353819208/1486201752477761590
+[32m14:39:09[0m | [1mINFO   [0m | Join Voice button found — clicking to join voice channel
+[32m14:39:14[0m | [1mINFO   [0m | Opened Activity shelf
+[32m14:39:16[0m | [1mINFO   [0m | Selected Letter League from shelf
+[32m14:39:19[0m | [1mINFO   [0m | No launcher button — game may already be launching (Error: Locator.wait_for: Error: strict mode violation:  resolved to 2 elements:
+    1) <button role="button" type="submit" aria-busy="false" data-mana-component="button" aria-label="Play Letter League" class="button_a22cb0 md_a22cb0 primary_a22cb0 hasText_a22cb0 fullWidth_a22cb0">…</button> aka get_by_role("button", name="Play Letter League")
+    2) <button role="button" type="submit" aria-busy="false" aria-label="Launch in DM" data-mana-component="button" class="button_a22cb0 md_a22cb0 secondary_a22cb0 hasText_a22cb0 fullWidth_a22cb0">…</button> aka get_by_role("button", name="Launch in DM")
+
+Call log:
+  - waiting for locator("button:has-text(\"Play\")").or_(locator("button:has-text(\"Launch\")")).or_(locator("button:has-text(\"Start Activity\")")).or_(locator("button:has-text(\"Resume\")")).or_(locator("button:has-text(\"Join Activity\")")) to be visible
+  - waiting for locator("button:has-text(\"Play\")").or_(locator("button:has-text(\"Launch\")")).or_(locator("button:has-text(\"Start Activity\")")).or_(locator("button:has-text(\"Resume\")")).or_(locator("button:has-text(\"Join Activity\")"))
+)
+[32m14:39:34[0m | [1mINFO   [0m | Clicked launcher button: button:has-text("Play")
+[32m14:39:34[0m | [1mINFO   [0m | Re-clicked launcher mid-wait (iframe still absent)
+[32m14:39:36[0m | [1mINFO   [0m | Activity iframe found: https://879863686565621790.discordsays.com/?instance_id=i-1500945002505961656-gc-1486201751353819208-1486201752477761590&location_id=gc-1486201751353819208-1486201752477761590&launch_id=1500945002505961656&referrer_id=undefined&custom_id=undefined&discord_proxy_ticket=faux-proxy-ticket&guild_id=1486201751353819208&channel_id=1486201752477761590&frame_id=f04e4f51-3320-4a10-9722-a776da2405e8&platform=desktop
+[32m14:39:36[0m | [1mINFO   [0m | Chat panel already hidden
+[32m14:39:36[0m | [1mINFO   [0m | Activity iframe verified visible
+[32m14:39:48[0m | [1mINFO   [0m | ensure_game_started: lobby detected — clicking START GAME (attempt 1/4)
+[32m14:39:48[0m | [1mINFO   [0m | Clicking START GAME button at iframe-relative (1347.2, 721.9) / page (1722.2, 833.9)
+[32m14:39:59[0m | [1mINFO   [0m | Game started — initial state: my_turn
+[32m14:40:04[0m | [1mINFO   [0m | ensure_game_started: game started — initial state: my_turn
+[32m14:40:07[0m | [1mINFO   [0m | Turn state changed: None -> my_turn
+[32m14:40:08[0m | [1mINFO   [0m | Pre-turn recall click at (1284.5, 753.5) (pass 1/4)
+[32m14:40:09[0m | [1mINFO   [0m | Pre-turn recall click at (1283.9, 752.4) (pass 2/4)
+[32m14:40:10[0m | [1mINFO   [0m | Pre-turn recall click at (1286.3, 751.4) (pass 3/4)
+[32m14:40:11[0m | [1mINFO   [0m | Pre-turn recall click at (1286.4, 752.9) (pass 4/4)
+[32m14:40:15[0m | [1mINFO   [0m | Vision pipeline start — mode=wild
+[32m14:40:15[0m | [1mINFO   [0m | Preprocessing complete — 359986 bytes
+[32m14:40:15[0m | [1mINFO   [0m | Calling Claude Vision API — retry=False
+[32m14:40:20[0m | [1mINFO   [0m | Claude Vision response received — latency=4.79s  input_tokens=2903  output_tokens=55
+[32m14:40:20[0m | [1mINFO   [0m | Extraction complete (first attempt)
+[32m14:40:20[0m | [1mINFO   [0m | Validation result — 0 error(s)
+[32m14:40:20[0m | [1mINFO   [0m | Vision pipeline complete — 5.15s  tiles=0  rack_size=7
+[32m14:40:20[0m | [1mINFO   [0m | Loaded 290 rejected words from C:\Github\Letter-League-Bot\data\rejected_words.txt
+[32m14:40:20[0m | [1mINFO   [0m | Word attempt 1/2: 'ITALIC' (score=36)
+[32m14:40:21[0m | [1mINFO   [0m | Placing tile 'I' (slot 4) -> board (9,11) | src=(1200.7,831.2) dst=(1043.7,493.1)
+[32m14:40:23[0m | [1mINFO   [0m | Tile 'I' verified at (9,11)
+[32m14:40:23[0m | [1mINFO   [0m | Placing tile 'T' (slot 0) -> board (9,12) | src=(982.9,829.8) dst=(1096.3,493.8)
+[32m14:40:26[0m | [1mINFO   [0m | Tile 'T' verified at (9,12)
+[32m14:40:26[0m | [1mINFO   [0m | Placing tile 'A' (slot 3) -> board (9,13) | src=(1143.1,826.5) dst=(1143.6,495.8)
+[32m14:40:29[0m | [1mINFO   [0m | Tile 'A' verified at (9,13)
+[32m14:40:29[0m | [1mINFO   [0m | Placing tile 'L' (slot 6) -> board (9,14) | src=(1312.4,826.0) dst=(1194.2,491.9)
+[32m14:40:32[0m | [1mINFO   [0m | Tile 'L' verified at (9,14)
+[32m14:40:33[0m | [1mINFO   [0m | Placing tile 'I' (slot 5) -> board (9,15) | src=(1259.4,828.4) dst=(1247.6,492.5)
+[32m14:40:35[0m | [1mINFO   [0m | Tile 'I' verified at (9,15)
+[32m14:40:35[0m | [1mINFO   [0m | Placing tile 'C' (slot 2) -> board (9,16) | src=(1088.2,826.1) dst=(1296.6,492.2)
+[32m14:40:38[0m | [1mINFO   [0m | Tile 'C' verified at (9,16)
+[32m14:40:39[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1148.6, 752.3)
+[32m14:40:41[0m | [1mINFO   [0m | Word 'ITALIC' accepted! (score=36, attempt 1/2)
+[32m14:40:41[0m | [1mINFO   [0m | Turn 1: played 'ITALIC' (score=36)
+[32m14:40:44[0m | [1mINFO   [0m | Turn state changed: None -> not_my_turn
+[32m14:40:49[0m | [1mINFO   [0m | Turn state changed: not_my_turn -> my_turn
+[32m14:40:50[0m | [1mINFO   [0m | Pre-turn recall click at (1287.0, 753.2) (pass 1/4)
+[32m14:40:51[0m | [1mINFO   [0m | Pre-turn recall click at (1287.7, 748.4) (pass 2/4)
+[32m14:40:52[0m | [1mINFO   [0m | Pre-turn recall click at (1286.8, 751.7) (pass 3/4)
+[32m14:40:53[0m | [1mINFO   [0m | Pre-turn recall click at (1284.6, 750.5) (pass 4/4)
+[32m14:40:57[0m | [1mINFO   [0m | Vision pipeline start — mode=wild
+[32m14:40:57[0m | [1mINFO   [0m | Preprocessing complete — 371505 bytes
+[32m14:40:57[0m | [1mINFO   [0m | Calling Claude Vision API — retry=False
+[32m14:41:01[0m | [1mINFO   [0m | Claude Vision response received — latency=3.80s  input_tokens=2903  output_tokens=205
+[32m14:41:01[0m | [1mINFO   [0m | Extraction complete (first attempt)
+[32m14:41:01[0m | [1mINFO   [0m | Validation result — 1 error(s)
+[32m14:41:01[0m | [33m[1mWARNING[0m | Validation failed (1 errors), retrying: ['Position accuracy suspect: 4/6 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:41:01[0m | [1mINFO   [0m | Calling Claude Vision API — retry=True
+[32m14:41:06[0m | [1mINFO   [0m | Claude Vision response received — latency=4.52s  input_tokens=2958  output_tokens=205
+[32m14:41:06[0m | [1mINFO   [0m | Extraction complete (retry)
+[32m14:41:06[0m | [1mINFO   [0m | Retry is a uniform (+0, -1) shift of first attempt — skipping merge to avoid duplicate-tile phantoms.
+[32m14:41:06[0m | [1mINFO   [0m | Validation result after retry — 1 error(s)
+[32m14:41:06[0m | [33m[1mWARNING[0m | Position accuracy check failed after retry — proceeding with auto-corrected multipliers: ['Position accuracy suspect: 6/6 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:41:06[0m | [1mINFO   [0m | Vision anchor: pinned 6 known tile(s); dropped 6 drifted duplicate(s); corrected 0 vision letter(s) at known positions.
+[32m14:41:06[0m | [1mINFO   [0m | Vision pipeline complete — 8.66s  tiles=6  rack_size=7
+[32m14:41:06[0m | [1mINFO   [0m | Word attempt 1/2: 'APEX' (score=48)
+[32m14:41:06[0m | [1mINFO   [0m | Placing tile 'A' (slot 1) -> board (8,12) | src=(1035.6,828.8) dst=(1098.2,462.0)
+[32m14:41:08[0m | [1mINFO   [0m | Tile 'A' verified at (8,12)
+[32m14:41:09[0m | [1mINFO   [0m | Placing tile 'P' (slot 6) -> board (8,13) | src=(1310.1,827.2) dst=(1147.6,457.9)
+[32m14:41:11[0m | [1mINFO   [0m | Tile 'P' verified at (8,13)
+[32m14:41:12[0m | [1mINFO   [0m | Placing tile 'E' (slot 0) -> board (8,14) | src=(981.3,830.6) dst=(1195.7,460.7)
+[32m14:41:14[0m | [1mINFO   [0m | Tile 'E' verified at (8,14)
+[32m14:41:15[0m | [1mINFO   [0m | Placing tile 'X' (slot 3) -> board (8,15) | src=(1147.8,830.7) dst=(1248.5,460.4)
+[32m14:41:17[0m | [1mINFO   [0m | Tile 'X' verified at (8,15)
+[32m14:41:19[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1148.4, 748.5)
+[32m14:41:21[0m | [1mINFO   [0m | Word 'APEX' accepted! (score=48, attempt 1/2)
+[32m14:41:21[0m | [1mINFO   [0m | Turn 2: played 'APEX' (score=48)
+[32m14:41:24[0m | [1mINFO   [0m | Turn state changed: None -> not_my_turn
+[32m14:41:29[0m | [1mINFO   [0m | Turn state changed: not_my_turn -> my_turn
+[32m14:41:30[0m | [1mINFO   [0m | Pre-turn recall click at (1284.5, 748.4) (pass 1/4)
+[32m14:41:31[0m | [1mINFO   [0m | Pre-turn recall click at (1284.9, 750.5) (pass 2/4)
+[32m14:41:32[0m | [1mINFO   [0m | Pre-turn recall click at (1285.1, 753.4) (pass 3/4)
+[32m14:41:32[0m | [1mINFO   [0m | Pre-turn recall click at (1285.5, 751.7) (pass 4/4)
+[32m14:41:37[0m | [1mINFO   [0m | Vision pipeline start — mode=wild
+[32m14:41:37[0m | [1mINFO   [0m | Preprocessing complete — 378747 bytes
+[32m14:41:37[0m | [1mINFO   [0m | Calling Claude Vision API — retry=False
+[32m14:41:42[0m | [1mINFO   [0m | Claude Vision response received — latency=4.81s  input_tokens=2903  output_tokens=306
+[32m14:41:42[0m | [1mINFO   [0m | Extraction complete (first attempt)
+[32m14:41:42[0m | [1mINFO   [0m | Validation result — 5 error(s)
+[32m14:41:42[0m | [33m[1mWARNING[0m | Validation failed (5 errors), retrying: ["Floating tile 'A' at (7, 11) — not connected to other tiles", "Floating tile 'P' at (7, 12) — not connected to other tiles", "Floating tile 'E' at (7, 13) — not connected to other tiles", "Floating tile 'X' at (7, 14) — not connected to other tiles", 'Position accuracy suspect: 8/10 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:41:42[0m | [1mINFO   [0m | Calling Claude Vision API — retry=True
+[32m14:41:47[0m | [1mINFO   [0m | Claude Vision response received — latency=4.88s  input_tokens=3042  output_tokens=307
+[32m14:41:47[0m | [1mINFO   [0m | Extraction complete (retry)
+[32m14:41:47[0m | [1mINFO   [0m | Validation result after retry — 5 error(s)
+[32m14:41:47[0m | [33m[1mWARNING[0m | Removed 4 floating tile(s) to salvage extraction
+[32m14:41:47[0m | [33m[1mWARNING[0m | Position accuracy check failed after retry — proceeding with auto-corrected multipliers: ['Position accuracy suspect: 8/10 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:41:47[0m | [1mINFO   [0m | Vision anchor: pinned 10 known tile(s); dropped 6 drifted duplicate(s); corrected 0 vision letter(s) at known positions.
+[32m14:41:47[0m | [1mINFO   [0m | Vision pipeline complete — 10.00s  tiles=10  rack_size=7
+[32m14:41:47[0m | [1mINFO   [0m | Word attempt 1/2: 'FOXIE' (score=38)
+[32m14:41:47[0m | [1mINFO   [0m | Placing tile 'F' (slot 3) -> board (6,15) | src=(1147.3,827.0) dst=(1246.1,390.3)
+[32m14:41:49[0m | [1mINFO   [0m | Tile 'F' verified at (6,15)
+[32m14:41:50[0m | [1mINFO   [0m | Placing tile 'O' (slot 2) -> board (7,15) | src=(1091.5,825.7) dst=(1245.1,425.9)
+[32m14:41:52[0m | [1mINFO   [0m | Tile 'O' verified at (7,15)
+[32m14:41:53[0m | [1mINFO   [0m | Placing tile 'E' (slot 1) -> board (10,15) | src=(1036.1,830.1) dst=(1248.2,527.7)
+[32m14:41:55[0m | [1mINFO   [0m | Tile 'E' verified at (10,15)
+[32m14:41:57[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1144.0, 749.1)
+[32m14:42:02[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1144.9, 752.1)
+[32m14:42:08[0m | [1mINFO   [0m | Word 'FOXIE' rejected (attempt 1/2) — recalling tiles
+[32m14:42:08[0m | [1mINFO   [0m | Blacklisted rejected word 'foxie' (total: 291)
+[32m14:42:08[0m | [1mINFO   [0m | Clicking recall button at (1284.9, 749.8) (pass 1/5)
+[32m14:42:08[0m | [1mINFO   [0m | Clicking recall button at (1283.4, 750.4) (pass 2/5)
+[32m14:42:09[0m | [1mINFO   [0m | Clicking recall button at (1288.2, 751.3) (pass 3/5)
+[32m14:42:10[0m | [1mINFO   [0m | Clicking recall button at (1286.9, 752.7) (pass 4/5)
+[32m14:42:11[0m | [1mINFO   [0m | Clicking recall button at (1286.7, 750.1) (pass 5/5)
+[32m14:42:12[0m | [1mINFO   [0m | Word attempt 2/2: 'OF' (score=15)
+[32m14:42:13[0m | [1mINFO   [0m | Placing tile 'O' (slot 2) -> board (10,10) | src=(1093.1,827.9) dst=(991.3,528.6)
+[32m14:42:15[0m | [1mINFO   [0m | Tile 'O' verified at (10,10)
+[32m14:42:15[0m | [1mINFO   [0m | Placing tile 'F' (slot 3) -> board (10,11) | src=(1146.2,830.7) dst=(1046.5,531.9)
+[32m14:42:18[0m | [1mINFO   [0m | Tile 'F' verified at (10,11)
+[32m14:42:19[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1146.1, 752.6)
+[32m14:42:25[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1145.6, 749.0)
+[32m14:42:30[0m | [1mINFO   [0m | Word 'OF' rejected (attempt 2/2) — recalling tiles
+[32m14:42:30[0m | [1mINFO   [0m | Blacklisted rejected word 'of' (total: 292)
+[32m14:42:30[0m | [1mINFO   [0m | Clicking recall button at (1287.4, 748.5) (pass 1/4)
+[32m14:42:31[0m | [1mINFO   [0m | Clicking recall button at (1288.0, 752.2) (pass 2/4)
+[32m14:42:32[0m | [1mINFO   [0m | Clicking recall button at (1287.8, 749.9) (pass 3/4)
+[32m14:42:33[0m | [1mINFO   [0m | Clicking recall button at (1284.8, 748.2) (pass 4/4)
+[32m14:42:35[0m | [33m[1mWARNING[0m | All 2 word attempt(s) failed — returning to caller for re-vision
+[32m14:42:35[0m | [33m[1mWARNING[0m | No move accepted (candidates=5) — re-vision + swap fallback
+[32m14:42:38[0m | [1mINFO   [0m | Vision pipeline start — mode=wild
+[32m14:42:39[0m | [1mINFO   [0m | Preprocessing complete — 381768 bytes
+[32m14:42:39[0m | [1mINFO   [0m | Calling Claude Vision API — retry=False
+[32m14:42:44[0m | [1mINFO   [0m | Claude Vision response received — latency=5.24s  input_tokens=2903  output_tokens=305
+[32m14:42:44[0m | [1mINFO   [0m | Extraction complete (first attempt)
+[32m14:42:44[0m | [1mINFO   [0m | Validation result — 5 error(s)
+[32m14:42:44[0m | [33m[1mWARNING[0m | Validation failed (5 errors), retrying: ["Floating tile 'A' at (7, 11) — not connected to other tiles", "Floating tile 'P' at (7, 12) — not connected to other tiles", "Floating tile 'E' at (7, 13) — not connected to other tiles", "Floating tile 'X' at (7, 14) — not connected to other tiles", 'Position accuracy suspect: 8/10 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:42:44[0m | [1mINFO   [0m | Calling Claude Vision API — retry=True
+[32m14:42:49[0m | [1mINFO   [0m | Claude Vision response received — latency=5.41s  input_tokens=3042  output_tokens=306
+[32m14:42:49[0m | [1mINFO   [0m | Extraction complete (retry)
+[32m14:42:49[0m | [1mINFO   [0m | Merged 1 cell(s) from first attempt that retry dropped: [('A', 7, 11)]
+[32m14:42:49[0m | [1mINFO   [0m | Validation result after retry — 7 error(s)
+[32m14:42:49[0m | [33m[1mWARNING[0m | Removed 5 floating tile(s) to salvage extraction
+[32m14:42:49[0m | [33m[1mWARNING[0m | Word validity check failed (1 word(s)) after retry — proceeding with best-effort extraction: ["Invalid word(s) on board: 'AAPEX' at row 7 cols 11-15 — tile positions are likely off by 1. Re-count carefully from center star at (9,13)."]
+[32m14:42:49[0m | [33m[1mWARNING[0m | Position accuracy check failed after retry — proceeding with auto-corrected multipliers: ['Position accuracy suspect: 8/10 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:42:49[0m | [1mINFO   [0m | Vision anchor: pinned 10 known tile(s); dropped 6 drifted duplicate(s); corrected 0 vision letter(s) at known positions.
+[32m14:42:49[0m | [1mINFO   [0m | Vision pipeline complete — 10.99s  tiles=10  rack_size=7
+[32m14:42:49[0m | [1mINFO   [0m | Word attempt 1/2: 'YOOF' (score=28)
+[32m14:42:49[0m | [1mINFO   [0m | Placing tile 'Y' (slot 5) -> board (7,9) | src=(1258.1,831.2) dst=(943.0,423.8)
+[32m14:42:52[0m | [1mINFO   [0m | Tile 'Y' verified at (7,9)
+[32m14:42:52[0m | [1mINFO   [0m | Placing tile 'O' (slot 0) -> board (7,10) | src=(982.9,828.6) dst=(996.6,427.8)
+[32m14:42:55[0m | [1mINFO   [0m | Tile 'O' verified at (7,10)
+[32m14:42:55[0m | [1mINFO   [0m | Placing tile 'O' (slot 2) -> board (7,11) | src=(1092.4,826.0) dst=(1047.7,424.2)
+[32m14:42:58[0m | [1mINFO   [0m | Tile 'O' verified at (7,11)
+[32m14:42:58[0m | [1mINFO   [0m | Placing tile 'F' (slot 3) -> board (7,12) | src=(1148.6,826.4) dst=(1096.7,423.0)
+[32m14:43:01[0m | [1mINFO   [0m | Tile 'F' verified at (7,12)
+[32m14:43:02[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1147.3, 749.5)
+[32m14:43:08[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1146.6, 749.3)
+[32m14:43:13[0m | [1mINFO   [0m | Word 'YOOF' rejected (attempt 1/2) — recalling tiles
+[32m14:43:13[0m | [1mINFO   [0m | Blacklisted rejected word 'yoof' (total: 293)
+[32m14:43:13[0m | [1mINFO   [0m | Clicking recall button at (1285.7, 754.0) (pass 1/6)
+[32m14:43:14[0m | [1mINFO   [0m | Clicking recall button at (1284.3, 751.6) (pass 2/6)
+[32m14:43:15[0m | [1mINFO   [0m | Clicking recall button at (1285.5, 752.1) (pass 3/6)
+[32m14:43:16[0m | [1mINFO   [0m | Clicking recall button at (1284.5, 750.0) (pass 4/6)
+[32m14:43:16[0m | [1mINFO   [0m | Clicking recall button at (1283.5, 749.0) (pass 5/6)
+[32m14:43:17[0m | [1mINFO   [0m | Clicking recall button at (1284.3, 750.2) (pass 6/6)
+[32m14:43:19[0m | [1mINFO   [0m | Word attempt 2/2: 'FEEL' (score=10)
+[32m14:43:19[0m | [1mINFO   [0m | Placing tile 'F' (slot 3) -> board (6,14) | src=(1144.7,828.9) dst=(1195.0,389.8)
+[32m14:43:22[0m | [1mINFO   [0m | Tile 'F' verified at (6,14)
+[32m14:43:22[0m | [1mINFO   [0m | Placing tile 'E' (slot 6) -> board (7,14) | src=(1309.4,829.5) dst=(1195.6,427.1)
+[32m14:43:25[0m | [1mINFO   [0m | Tile 'E' verified at (7,14)
+[32m14:43:26[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1149.2, 749.0)
+[32m14:43:32[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1148.9, 749.5)
+[32m14:43:38[0m | [1mINFO   [0m | Word 'FEEL' rejected (attempt 2/2) — recalling tiles
+[32m14:43:38[0m | [1mINFO   [0m | Blacklisted rejected word 'feel' (total: 294)
+[32m14:43:38[0m | [1mINFO   [0m | Clicking recall button at (1286.7, 748.0) (pass 1/4)
+[32m14:43:38[0m | [1mINFO   [0m | Clicking recall button at (1288.0, 752.5) (pass 2/4)
+[32m14:43:39[0m | [1mINFO   [0m | Clicking recall button at (1287.4, 753.3) (pass 3/4)
+[32m14:43:40[0m | [1mINFO   [0m | Clicking recall button at (1282.9, 753.9) (pass 4/4)
+[32m14:43:42[0m | [33m[1mWARNING[0m | All 2 word attempt(s) failed — performing tile swap fallback
+[32m14:43:42[0m | [33m[1mWARNING[0m | Falling back to tile swap at (1005.0, 749.0) — no valid words accepted after 2 attempts
+[32m14:43:42[0m | [1mINFO   [0m | Turn 3: no move accepted (swap/skip)
+[32m14:43:45[0m | [1mINFO   [0m | Turn state changed: None -> my_turn
+[32m14:43:46[0m | [1mINFO   [0m | Pre-turn recall click at (1283.8, 752.1) (pass 1/4)
+[32m14:43:47[0m | [1mINFO   [0m | Pre-turn recall click at (1283.4, 748.3) (pass 2/4)
+[32m14:43:48[0m | [1mINFO   [0m | Pre-turn recall click at (1283.7, 753.3) (pass 3/4)
+[32m14:43:49[0m | [1mINFO   [0m | Pre-turn recall click at (1285.8, 750.0) (pass 4/4)
+[32m14:43:53[0m | [1mINFO   [0m | Vision pipeline start — mode=wild
+[32m14:43:53[0m | [1mINFO   [0m | Preprocessing complete — 381479 bytes
+[32m14:43:53[0m | [1mINFO   [0m | Calling Claude Vision API — retry=False
+[32m14:43:59[0m | [1mINFO   [0m | Claude Vision response received — latency=5.21s  input_tokens=2903  output_tokens=307
+[32m14:43:59[0m | [1mINFO   [0m | Extraction complete (first attempt)
+[32m14:43:59[0m | [1mINFO   [0m | Position auto-correction: shifting tiles by (-3, -3) — multiplier matches 2 \u2192 5
+[32m14:43:59[0m | [1mINFO   [0m | Validation result — 5 error(s)
+[32m14:43:59[0m | [33m[1mWARNING[0m | Validation failed (5 errors), retrying: ["Floating tile 'A' at (4, 6) — not connected to other tiles", "Floating tile 'P' at (4, 7) — not connected to other tiles", "Floating tile 'E' at (4, 8) — not connected to other tiles", "Floating tile 'X' at (4, 9) — not connected to other tiles", 'Position accuracy suspect: 6/10 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:43:59[0m | [1mINFO   [0m | Calling Claude Vision API — retry=True
+[32m14:44:04[0m | [1mINFO   [0m | Claude Vision response received — latency=5.26s  input_tokens=3042  output_tokens=304
+[32m14:44:04[0m | [1mINFO   [0m | Extraction complete (retry)
+[32m14:44:04[0m | [1mINFO   [0m | Position auto-correction: shifting tiles by (-3, -3) — multiplier matches 2 \u2192 5
+[32m14:44:04[0m | [1mINFO   [0m | Validation result after retry — 5 error(s)
+[32m14:44:04[0m | [33m[1mWARNING[0m | Removed 4 floating tile(s) to salvage extraction
+[32m14:44:04[0m | [33m[1mWARNING[0m | Position accuracy check failed after retry — proceeding with auto-corrected multipliers: ['Position accuracy suspect: 7/10 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:44:04[0m | [1mINFO   [0m | Vision anchor: pinned 10 known tile(s); dropped 1 drifted duplicate(s); corrected 0 vision letter(s) at known positions.
+[32m14:44:04[0m | [1mINFO   [0m | Vision pipeline complete — 10.77s  tiles=15  rack_size=7
+[32m14:44:04[0m | [1mINFO   [0m | Word attempt 1/2: 'FOOTY' (score=33)
+[32m14:44:04[0m | [1mINFO   [0m | Placing tile 'F' (slot 3) -> board (3,7) | src=(1144.3,829.6) dst=(839.7,285.9)
+[32m14:44:07[0m | [1mINFO   [0m | Tile 'F' verified at (3,7)
+[32m14:44:07[0m | [1mINFO   [0m | Placing tile 'O' (slot 0) -> board (4,7) | src=(978.1,827.9) dst=(841.8,323.8)
+[32m14:44:10[0m | [1mINFO   [0m | Tile 'O' verified at (4,7)
+[32m14:44:10[0m | [1mINFO   [0m | Placing tile 'O' (slot 1) -> board (5,7) | src=(1033.3,828.2) dst=(845.2,354.7)
+[32m14:44:13[0m | [1mINFO   [0m | Tile 'O' verified at (5,7)
+[32m14:44:13[0m | [1mINFO   [0m | Placing tile 'Y' (slot 4) -> board (7,7) | src=(1203.5,827.5) dst=(844.6,426.2)
+[32m14:44:16[0m | [1mINFO   [0m | Tile 'Y' verified at (7,7)
+[32m14:44:17[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1145.0, 752.3)
+[32m14:44:23[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1148.8, 752.1)
+[32m14:44:28[0m | [1mINFO   [0m | Word 'FOOTY' rejected (attempt 1/2) — recalling tiles
+[32m14:44:28[0m | [1mINFO   [0m | Blacklisted rejected word 'footy' (total: 295)
+[32m14:44:28[0m | [1mINFO   [0m | Clicking recall button at (1287.2, 748.0) (pass 1/6)
+[32m14:44:29[0m | [1mINFO   [0m | Clicking recall button at (1286.5, 751.8) (pass 2/6)
+[32m14:44:30[0m | [1mINFO   [0m | Clicking recall button at (1285.3, 752.1) (pass 3/6)
+[32m14:44:31[0m | [1mINFO   [0m | Clicking recall button at (1288.3, 748.2) (pass 4/6)
+[32m14:44:32[0m | [1mINFO   [0m | Clicking recall button at (1285.0, 748.6) (pass 5/6)
+[32m14:44:32[0m | [1mINFO   [0m | Clicking recall button at (1285.0, 753.9) (pass 6/6)
+[32m14:44:34[0m | [1mINFO   [0m | Word attempt 2/2: 'TO' (score=2)
+[32m14:44:34[0m | [1mINFO   [0m | Placing tile 'O' (slot 0) -> board (7,7) | src=(979.4,829.8) dst=(842.5,426.1)
+[32m14:44:37[0m | [1mINFO   [0m | Tile 'O' verified at (7,7)
+[32m14:44:38[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1146.5, 749.8)
+[32m14:44:44[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1147.5, 751.1)
+[32m14:44:49[0m | [1mINFO   [0m | Word 'TO' rejected (attempt 2/2) — recalling tiles
+[32m14:44:49[0m | [1mINFO   [0m | Blacklisted rejected word 'to' (total: 296)
+[32m14:44:49[0m | [1mINFO   [0m | Clicking recall button at (1286.1, 751.0) (pass 1/3)
+[32m14:44:50[0m | [1mINFO   [0m | Clicking recall button at (1284.2, 752.5) (pass 2/3)
+[32m14:44:51[0m | [1mINFO   [0m | Clicking recall button at (1284.6, 750.0) (pass 3/3)
+[32m14:44:52[0m | [33m[1mWARNING[0m | All 2 word attempt(s) failed — returning to caller for re-vision
+[32m14:44:52[0m | [33m[1mWARNING[0m | No move accepted (candidates=5) — re-vision + swap fallback
+[32m14:44:56[0m | [1mINFO   [0m | Vision pipeline start — mode=wild
+[32m14:44:56[0m | [1mINFO   [0m | Preprocessing complete — 380174 bytes
+[32m14:44:56[0m | [1mINFO   [0m | Calling Claude Vision API — retry=False
+[32m14:45:01[0m | [1mINFO   [0m | Claude Vision response received — latency=4.97s  input_tokens=2903  output_tokens=304
+[32m14:45:01[0m | [1mINFO   [0m | Extraction complete (first attempt)
+[32m14:45:01[0m | [1mINFO   [0m | Position auto-correction: shifting tiles by (-3, -3) — multiplier matches 2 \u2192 5
+[32m14:45:01[0m | [1mINFO   [0m | Validation result — 5 error(s)
+[32m14:45:01[0m | [33m[1mWARNING[0m | Validation failed (5 errors), retrying: ["Floating tile 'A' at (4, 6) — not connected to other tiles", "Floating tile 'P' at (4, 7) — not connected to other tiles", "Floating tile 'E' at (4, 8) — not connected to other tiles", "Floating tile 'X' at (4, 9) — not connected to other tiles", 'Position accuracy suspect: 7/10 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:45:01[0m | [1mINFO   [0m | Calling Claude Vision API — retry=True
+[32m14:45:06[0m | [1mINFO   [0m | Claude Vision response received — latency=5.34s  input_tokens=3042  output_tokens=304
+[32m14:45:06[0m | [1mINFO   [0m | Extraction complete (retry)
+[32m14:45:06[0m | [1mINFO   [0m | Retry is a uniform (+3, +5) shift of first attempt — skipping merge to avoid duplicate-tile phantoms.
+[32m14:45:06[0m | [1mINFO   [0m | Validation result after retry — 5 error(s)
+[32m14:45:06[0m | [33m[1mWARNING[0m | Removed 4 floating tile(s) to salvage extraction
+[32m14:45:06[0m | [33m[1mWARNING[0m | Position accuracy check failed after retry — proceeding with auto-corrected multipliers: ['Position accuracy suspect: 8/10 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:45:06[0m | [1mINFO   [0m | Vision anchor: pinned 10 known tile(s); dropped 6 drifted duplicate(s); corrected 0 vision letter(s) at known positions.
+[32m14:45:06[0m | [1mINFO   [0m | Vision pipeline complete — 10.66s  tiles=10  rack_size=7
+[32m14:45:06[0m | [1mINFO   [0m | Word attempt 1/2: 'FOE' (score=25)
+[32m14:45:07[0m | [1mINFO   [0m | Placing tile 'F' (slot 3) -> board (7,12) | src=(1144.0,831.0) dst=(1092.7,424.0)
+[32m14:45:09[0m | [1mINFO   [0m | Tile 'F' verified at (7,12)
+[32m14:45:10[0m | [1mINFO   [0m | Placing tile 'O' (slot 0) -> board (7,13) | src=(980.2,827.4) dst=(1144.9,423.0)
+[32m14:45:12[0m | [1mINFO   [0m | Tile 'O' verified at (7,13)
+[32m14:45:13[0m | [1mINFO   [0m | Placing tile 'E' (slot 1) -> board (7,14) | src=(1038.1,830.7) dst=(1198.4,426.8)
+[32m14:45:15[0m | [1mINFO   [0m | Tile 'E' verified at (7,14)
+[32m14:45:17[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1145.5, 748.4)
+[32m14:45:22[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1146.3, 751.2)
+[32m14:45:28[0m | [1mINFO   [0m | Word 'FOE' rejected (attempt 1/2) — recalling tiles
+[32m14:45:28[0m | [1mINFO   [0m | Blacklisted rejected word 'foe' (total: 297)
+[32m14:45:28[0m | [1mINFO   [0m | Clicking recall button at (1285.2, 753.3) (pass 1/5)
+[32m14:45:29[0m | [1mINFO   [0m | Clicking recall button at (1285.7, 752.2) (pass 2/5)
+[32m14:45:30[0m | [1mINFO   [0m | Clicking recall button at (1286.5, 749.8) (pass 3/5)
+[32m14:45:30[0m | [1mINFO   [0m | Clicking recall button at (1282.7, 753.8) (pass 4/5)
+[32m14:45:31[0m | [1mINFO   [0m | Clicking recall button at (1284.9, 751.6) (pass 5/5)
+[32m14:45:33[0m | [1mINFO   [0m | Word attempt 2/2: 'PAY' (score=8)
+[32m14:45:33[0m | [1mINFO   [0m | Placing tile 'Y' (slot 2) -> board (10,13) | src=(1090.7,828.8) dst=(1148.3,530.9)
+[32m14:45:35[0m | [1mINFO   [0m | Tile 'Y' verified at (10,13)
+[32m14:45:36[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1146.7, 750.1)
+[32m14:45:42[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1148.0, 751.6)
+[32m14:45:47[0m | [1mINFO   [0m | Word 'PAY' rejected (attempt 2/2) — recalling tiles
+[32m14:45:47[0m | [1mINFO   [0m | Blacklisted rejected word 'pay' (total: 298)
+[32m14:45:47[0m | [1mINFO   [0m | Clicking recall button at (1284.7, 750.1) (pass 1/3)
+[32m14:45:48[0m | [1mINFO   [0m | Clicking recall button at (1284.4, 753.3) (pass 2/3)
+[32m14:45:49[0m | [1mINFO   [0m | Clicking recall button at (1283.2, 753.1) (pass 3/3)
+[32m14:45:51[0m | [33m[1mWARNING[0m | All 2 word attempt(s) failed — performing tile swap fallback
+[32m14:45:51[0m | [33m[1mWARNING[0m | Falling back to tile swap at (1008.2, 753.1) — no valid words accepted after 2 attempts
+[32m14:45:51[0m | [1mINFO   [0m | Turn 4: no move accepted (swap/skip)
+[32m14:45:54[0m | [1mINFO   [0m | Turn state changed: None -> my_turn
+[32m14:45:55[0m | [1mINFO   [0m | Pre-turn recall click at (1285.1, 750.8) (pass 1/4)
+[32m14:45:56[0m | [1mINFO   [0m | Pre-turn recall click at (1285.1, 750.9) (pass 2/4)
+[32m14:45:57[0m | [1mINFO   [0m | Pre-turn recall click at (1284.9, 753.2) (pass 3/4)
+[32m14:45:58[0m | [1mINFO   [0m | Pre-turn recall click at (1284.6, 752.3) (pass 4/4)
+[32m14:46:02[0m | [1mINFO   [0m | Vision pipeline start — mode=wild
+[32m14:46:02[0m | [1mINFO   [0m | Preprocessing complete — 379989 bytes
+[32m14:46:02[0m | [1mINFO   [0m | Calling Claude Vision API — retry=False
+[32m14:46:07[0m | [1mINFO   [0m | Claude Vision response received — latency=5.19s  input_tokens=2903  output_tokens=306
+[32m14:46:07[0m | [1mINFO   [0m | Extraction complete (first attempt)
+[32m14:46:07[0m | [1mINFO   [0m | Validation result — 5 error(s)
+[32m14:46:07[0m | [33m[1mWARNING[0m | Validation failed (5 errors), retrying: ["Floating tile 'A' at (7, 11) — not connected to other tiles", "Floating tile 'P' at (7, 12) — not connected to other tiles", "Floating tile 'E' at (7, 13) — not connected to other tiles", "Floating tile 'X' at (7, 14) — not connected to other tiles", 'Position accuracy suspect: 8/10 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:46:07[0m | [1mINFO   [0m | Calling Claude Vision API — retry=True
+[32m14:46:12[0m | [1mINFO   [0m | Claude Vision response received — latency=4.87s  input_tokens=3042  output_tokens=304
+[32m14:46:12[0m | [1mINFO   [0m | Extraction complete (retry)
+[32m14:46:12[0m | [1mINFO   [0m | Position auto-correction: shifting tiles by (-3, -3) — multiplier matches 2 \u2192 5
+[32m14:46:12[0m | [1mINFO   [0m | Retry is a uniform (-3, -5) shift of first attempt — skipping merge to avoid duplicate-tile phantoms.
+[32m14:46:12[0m | [1mINFO   [0m | Validation result after retry — 5 error(s)
+[32m14:46:12[0m | [33m[1mWARNING[0m | Removed 4 floating tile(s) to salvage extraction
+[32m14:46:12[0m | [33m[1mWARNING[0m | Position accuracy check failed after retry — proceeding with auto-corrected multipliers: ['Position accuracy suspect: 6/10 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:46:12[0m | [1mINFO   [0m | Vision anchor: pinned 10 known tile(s); dropped 1 drifted duplicate(s); corrected 0 vision letter(s) at known positions.
+[32m14:46:12[0m | [1mINFO   [0m | Vision pipeline complete — 10.40s  tiles=15  rack_size=7
+[32m14:46:16[0m | [1mINFO   [0m | Word attempt 1/2: 'FOOTIE' (score=30)
+[32m14:46:16[0m | [1mINFO   [0m | Placing tile 'F' (slot 0) -> board (3,7) | src=(978.1,830.6) dst=(840.5,285.6)
+[32m14:46:19[0m | [1mINFO   [0m | Tile 'F' verified at (3,7)
+[32m14:46:19[0m | [1mINFO   [0m | Placing tile 'O' (slot 3) -> board (4,7) | src=(1148.9,830.7) dst=(840.2,319.1)
+[32m14:46:22[0m | [1mINFO   [0m | Tile 'O' verified at (4,7)
+[32m14:46:22[0m | [1mINFO   [0m | Placing tile 'O' (slot 4) -> board (5,7) | src=(1204.2,826.5) dst=(842.4,355.8)
+[32m14:46:25[0m | [1mINFO   [0m | Tile 'O' verified at (5,7)
+[32m14:46:25[0m | [1mINFO   [0m | Placing tile 'I' (slot 6) -> board (7,7) | src=(1309.1,827.1) dst=(842.0,424.2)
+[32m14:46:28[0m | [1mINFO   [0m | Tile 'I' verified at (7,7)
+[32m14:46:28[0m | [1mINFO   [0m | Placing tile 'E' (slot 1) -> board (8,7) | src=(1033.4,828.1) dst=(844.4,458.4)
+[32m14:46:31[0m | [1mINFO   [0m | Tile 'E' verified at (8,7)
+[32m14:46:32[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1144.5, 751.1)
+[32m14:46:38[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1147.8, 750.0)
+[32m14:46:43[0m | [1mINFO   [0m | Word 'FOOTIE' rejected (attempt 1/2) — recalling tiles
+[32m14:46:43[0m | [1mINFO   [0m | Blacklisted rejected word 'footie' (total: 299)
+[32m14:46:43[0m | [1mINFO   [0m | Clicking recall button at (1282.9, 752.8) (pass 1/7)
+[32m14:46:44[0m | [1mINFO   [0m | Clicking recall button at (1285.0, 748.8) (pass 2/7)
+[32m14:46:45[0m | [1mINFO   [0m | Clicking recall button at (1285.8, 753.9) (pass 3/7)
+[32m14:46:46[0m | [1mINFO   [0m | Clicking recall button at (1285.3, 754.0) (pass 4/7)
+[32m14:46:47[0m | [1mINFO   [0m | Clicking recall button at (1286.6, 748.9) (pass 5/7)
+[32m14:46:48[0m | [1mINFO   [0m | Clicking recall button at (1287.2, 748.3) (pass 6/7)
+[32m14:46:49[0m | [1mINFO   [0m | Clicking recall button at (1288.4, 751.9) (pass 7/7)
+[32m14:46:50[0m | [1mINFO   [0m | Word attempt 2/2: 'IT' (score=2)
+[32m14:46:50[0m | [1mINFO   [0m | Placing tile 'I' (slot 6) -> board (5,7) | src=(1309.2,829.4) dst=(841.4,357.1)
+[32m14:46:53[0m | [1mINFO   [0m | Tile 'I' verified at (5,7)
+[32m14:46:54[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1145.3, 751.5)
+[32m14:47:00[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1146.6, 748.9)
+[32m14:47:05[0m | [1mINFO   [0m | Word 'IT' rejected (attempt 2/2) — recalling tiles
+[32m14:47:05[0m | [1mINFO   [0m | Blacklisted rejected word 'it' (total: 300)
+[32m14:47:05[0m | [1mINFO   [0m | Clicking recall button at (1284.2, 748.7) (pass 1/3)
+[32m14:47:06[0m | [1mINFO   [0m | Clicking recall button at (1287.8, 749.8) (pass 2/3)
+[32m14:47:07[0m | [1mINFO   [0m | Clicking recall button at (1284.9, 748.3) (pass 3/3)
+[32m14:47:08[0m | [33m[1mWARNING[0m | All 2 word attempt(s) failed — returning to caller for re-vision
+[32m14:47:08[0m | [33m[1mWARNING[0m | No move accepted (candidates=5) — re-vision + swap fallback
+[32m14:47:12[0m | [1mINFO   [0m | Vision pipeline start — mode=wild
+[32m14:47:12[0m | [1mINFO   [0m | Preprocessing complete — 379010 bytes
+[32m14:47:12[0m | [1mINFO   [0m | Calling Claude Vision API — retry=False
+[32m14:47:17[0m | [1mINFO   [0m | Claude Vision response received — latency=5.08s  input_tokens=2903  output_tokens=305
+[32m14:47:17[0m | [1mINFO   [0m | Extraction complete (first attempt)
+[32m14:47:17[0m | [1mINFO   [0m | Validation result — 5 error(s)
+[32m14:47:17[0m | [33m[1mWARNING[0m | Validation failed (5 errors), retrying: ["Floating tile 'A' at (7, 11) — not connected to other tiles", "Floating tile 'P' at (7, 12) — not connected to other tiles", "Floating tile 'E' at (7, 13) — not connected to other tiles", "Floating tile 'X' at (7, 14) — not connected to other tiles", 'Position accuracy suspect: 8/10 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:47:17[0m | [1mINFO   [0m | Calling Claude Vision API — retry=True
+[32m14:47:23[0m | [1mINFO   [0m | Claude Vision response received — latency=6.40s  input_tokens=3042  output_tokens=417
+[32m14:47:23[0m | [1mINFO   [0m | Extraction complete (retry)
+[32m14:47:23[0m | [1mINFO   [0m | Position auto-correction: shifting tiles by (-3, -2) — multiplier matches 2 \u2192 6
+[32m14:47:23[0m | [1mINFO   [0m | Merged 10 cell(s) from first attempt that retry dropped: [('A', 7, 11), ('P', 7, 12), ('E', 7, 13), ('X', 7, 14), ('I', 9, 11), ('T', 9, 12), ('A', 9, 13), ('L', 9, 14), ('I', 9, 15), ('C', 9, 16)]
+[32m14:47:23[0m | [1mINFO   [0m | Validation result after retry — 19 error(s)
+[32m14:47:23[0m | [33m[1mWARNING[0m | Removed 17 floating tile(s) to salvage extraction
+[32m14:47:23[0m | [33m[1mWARNING[0m | Word validity check failed (1 word(s)) after retry — proceeding with best-effort extraction: ["Invalid word(s) on board: 'PEX' at row 4 cols 8-10, 'CA' at col 11 rows 6-7 — tile positions are likely off by 1. Re-count carefully from center star at (9,13)."]
+[32m14:47:23[0m | [33m[1mWARNING[0m | Position accuracy check failed after retry — proceeding with auto-corrected multipliers: ['Position accuracy suspect: 7/12 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:47:23[0m | [1mINFO   [0m | Vision anchor: pinned 10 known tile(s); dropped 0 drifted duplicate(s); corrected 0 vision letter(s) at known positions.
+[32m14:47:23[0m | [1mINFO   [0m | Vision pipeline complete — 11.79s  tiles=13  rack_size=7
+[32m14:47:23[0m | [1mINFO   [0m | Word attempt 1/2: 'HAZY' (score=84)
+[32m14:47:24[0m | [1mINFO   [0m | Placing tile 'H' (slot 0) -> board (3,7) | src=(980.5,830.4) dst=(842.9,285.6)
+[32m14:47:26[0m | [1mINFO   [0m | Tile 'H' verified at (3,7)
+[32m14:47:26[0m | [1mINFO   [0m | Placing tile 'A' (slot 4) -> board (4,7) | src=(1201.7,827.5) dst=(841.6,323.5)
+[32m14:47:29[0m | [1mINFO   [0m | Tile 'A' verified at (4,7)
+[32m14:47:29[0m | [1mINFO   [0m | Placing tile 'Z' (slot 5) -> board (5,7) | src=(1254.2,826.1) dst=(839.7,357.7)
+[32m14:47:32[0m | [1mINFO   [0m | Tile 'Z' verified at (5,7)
+[32m14:47:32[0m | [1mINFO   [0m | Placing tile 'Y' (slot 3) -> board (6,7) | src=(1147.8,829.5) dst=(842.7,392.1)
+[32m14:47:35[0m | [1mINFO   [0m | Tile 'Y' verified at (6,7)
+[32m14:47:36[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1149.4, 748.3)
+[32m14:47:42[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1147.6, 752.6)
+[32m14:47:47[0m | [1mINFO   [0m | Word 'HAZY' rejected (attempt 1/2) — recalling tiles
+[32m14:47:47[0m | [1mINFO   [0m | Blacklisted rejected word 'hazy' (total: 301)
+[32m14:47:47[0m | [1mINFO   [0m | Clicking recall button at (1286.7, 750.1) (pass 1/6)
+[32m14:47:48[0m | [1mINFO   [0m | Clicking recall button at (1284.4, 753.0) (pass 2/6)
+[32m14:47:49[0m | [1mINFO   [0m | Clicking recall button at (1287.4, 752.3) (pass 3/6)
+[32m14:47:50[0m | [1mINFO   [0m | Clicking recall button at (1286.1, 750.3) (pass 4/6)
+[32m14:47:51[0m | [1mINFO   [0m | Clicking recall button at (1285.6, 753.4) (pass 5/6)
+[32m14:47:52[0m | [1mINFO   [0m | Clicking recall button at (1285.3, 750.4) (pass 6/6)
+[32m14:47:53[0m | [1mINFO   [0m | Word attempt 2/2: 'IS' (score=4)
+[32m14:47:54[0m | [1mINFO   [0m | Placing tile 'S' (slot 1) -> board (10,11) | src=(1036.5,828.5) dst=(1044.8,528.0)
+[32m14:47:56[0m | [1mINFO   [0m | Tile 'S' verified at (10,11)
+[32m14:47:58[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1145.5, 749.2)
+[32m14:48:03[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1148.9, 749.3)
+[32m14:48:09[0m | [1mINFO   [0m | Word 'IS' rejected (attempt 2/2) — recalling tiles
+[32m14:48:09[0m | [1mINFO   [0m | Blacklisted rejected word 'is' (total: 302)
+[32m14:48:09[0m | [1mINFO   [0m | Clicking recall button at (1282.9, 751.6) (pass 1/3)
+[32m14:48:09[0m | [1mINFO   [0m | Clicking recall button at (1285.6, 751.4) (pass 2/3)
+[32m14:48:10[0m | [1mINFO   [0m | Clicking recall button at (1282.6, 749.5) (pass 3/3)
+[32m14:48:12[0m | [33m[1mWARNING[0m | All 2 word attempt(s) failed — performing tile swap fallback
+[32m14:48:12[0m | [33m[1mWARNING[0m | Falling back to tile swap at (1008.8, 749.2) — no valid words accepted after 2 attempts
+[32m14:48:12[0m | [1mINFO   [0m | Turn 5: no move accepted (swap/skip)
+[32m14:48:15[0m | [1mINFO   [0m | Turn state changed: None -> my_turn
+[32m14:48:16[0m | [1mINFO   [0m | Pre-turn recall click at (1283.0, 752.5) (pass 1/4)
+[32m14:48:17[0m | [1mINFO   [0m | Pre-turn recall click at (1287.2, 748.2) (pass 2/4)
+[32m14:48:18[0m | [1mINFO   [0m | Pre-turn recall click at (1283.1, 750.8) (pass 3/4)
+[32m14:48:19[0m | [1mINFO   [0m | Pre-turn recall click at (1287.9, 754.0) (pass 4/4)
+[32m14:48:23[0m | [1mINFO   [0m | Vision pipeline start — mode=wild
+[32m14:48:24[0m | [1mINFO   [0m | Preprocessing complete — 380652 bytes
+[32m14:48:24[0m | [1mINFO   [0m | Calling Claude Vision API — retry=False
+[32m14:48:30[0m | [1mINFO   [0m | Claude Vision response received — latency=6.05s  input_tokens=2903  output_tokens=331
+[32m14:48:30[0m | [1mINFO   [0m | Extraction complete (first attempt)
+[32m14:48:30[0m | [1mINFO   [0m | Position auto-correction: shifting tiles by (-3, -3) — multiplier matches 2 \u2192 6
+[32m14:48:30[0m | [1mINFO   [0m | Validation result — 6 error(s)
+[32m14:48:30[0m | [33m[1mWARNING[0m | Validation failed (6 errors), retrying: ["Floating tile 'A' at (4, 6) — not connected to other tiles", "Floating tile 'P' at (4, 8) — not connected to other tiles", "Floating tile 'E' at (4, 10) — not connected to other tiles", "Floating tile 'X' at (4, 11) — not connected to other tiles", 'Position accuracy suspect: 8/11 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.', "Invalid word(s) on board: 'ITALICC' at row 6 cols 6-12 — tile positions are likely off by 1. Re-count carefully from center star at (9,13)."]
+[32m14:48:30[0m | [1mINFO   [0m | Calling Claude Vision API — retry=True
+[32m14:48:35[0m | [1mINFO   [0m | Claude Vision response received — latency=5.30s  input_tokens=3092  output_tokens=308
+[32m14:48:35[0m | [1mINFO   [0m | Extraction complete (retry)
+[32m14:48:35[0m | [1mINFO   [0m | Position auto-correction: shifting tiles by (-3, -2) — multiplier matches 2 \u2192 6
+[32m14:48:35[0m | [1mINFO   [0m | Center star correction: shifting tiles by (+3, +1) to place a tile on (9,13) — multiplier score 4
+[32m14:48:35[0m | [1mINFO   [0m | Merged 11 cell(s) from first attempt that retry dropped: [('A', 4, 6), ('P', 4, 8), ('E', 4, 10), ('X', 4, 11), ('I', 6, 6), ('T', 6, 7), ('A', 6, 8), ('L', 6, 9), ('I', 6, 10), ('C', 6, 11), ('C', 6, 12)]
+[32m14:48:35[0m | [1mINFO   [0m | Validation result after retry — 12 error(s)
+[32m14:48:35[0m | [33m[1mWARNING[0m | Removed 11 floating tile(s) to salvage extraction
+[32m14:48:35[0m | [33m[1mWARNING[0m | Word validity check failed (1 word(s)) after retry — proceeding with best-effort extraction: ["Invalid word(s) on board: 'ITALICC' at row 6 cols 6-12, 'LP' at col 9 rows 6-7, 'CE' at col 11 rows 6-7, 'ALIC' at row 9 cols 11-14 — tile positions are likely off by 1. Re-count carefully from center star at (9,13)."]
+[32m14:48:35[0m | [1mINFO   [0m | Vision anchor: pinned 10 known tile(s); dropped 3 drifted duplicate(s); corrected 0 vision letter(s) at known positions.
+[32m14:48:35[0m | [1mINFO   [0m | Vision pipeline complete — 11.69s  tiles=17  rack_size=7
+[32m14:48:35[0m | [1mINFO   [0m | Word attempt 1/2: 'SYRAH' (score=62)
+[32m14:48:35[0m | [1mINFO   [0m | Placing tile 'S' (slot 4) -> board (9,17) | src=(1200.3,828.8) dst=(1348.0,494.0)
+[32m14:48:38[0m | [1mINFO   [0m | Tile 'S' verified at (9,17)
+[32m14:48:39[0m | [1mINFO   [0m | Placing tile 'Y' (slot 1) -> board (10,17) | src=(1033.6,828.6) dst=(1347.9,531.5)
+[32m14:48:41[0m | [1mINFO   [0m | Tile 'Y' verified at (10,17)
+[32m14:48:42[0m | [1mINFO   [0m | Placing tile 'R' (slot 0) -> board (11,17) | src=(978.8,828.7) dst=(1349.2,566.8)
+[32m14:48:44[0m | [1mINFO   [0m | Tile 'R' verified at (11,17)
+[32m14:48:45[0m | [1mINFO   [0m | Placing tile 'A' (slot 3) -> board (12,17) | src=(1144.5,829.8) dst=(1349.6,599.5)
+[32m14:48:47[0m | [1mINFO   [0m | Tile 'A' verified at (12,17)
+[32m14:48:48[0m | [1mINFO   [0m | Placing tile 'H' (slot 2) -> board (13,17) | src=(1092.7,826.7) dst=(1350.4,631.8)
+[32m14:48:50[0m | [1mINFO   [0m | Tile 'H' verified at (13,17)
+[32m14:48:52[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1144.5, 753.1)
+[32m14:48:57[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1144.3, 751.6)
+[32m14:49:03[0m | [1mINFO   [0m | Word 'SYRAH' rejected (attempt 1/2) — recalling tiles
+[32m14:49:03[0m | [1mINFO   [0m | Blacklisted rejected word 'syrah' (total: 303)
+[32m14:49:03[0m | [1mINFO   [0m | Clicking recall button at (1288.0, 749.2) (pass 1/7)
+[32m14:49:04[0m | [1mINFO   [0m | Clicking recall button at (1287.6, 750.4) (pass 2/7)
+[32m14:49:04[0m | [1mINFO   [0m | Clicking recall button at (1283.5, 753.8) (pass 3/7)
+[32m14:49:05[0m | [1mINFO   [0m | Clicking recall button at (1287.0, 752.2) (pass 4/7)
+[32m14:49:06[0m | [1mINFO   [0m | Clicking recall button at (1284.7, 748.0) (pass 5/7)
+[32m14:49:07[0m | [1mINFO   [0m | Clicking recall button at (1283.8, 752.4) (pass 6/7)
+[32m14:49:08[0m | [1mINFO   [0m | Clicking recall button at (1287.2, 749.9) (pass 7/7)
+[32m14:49:09[0m | [1mINFO   [0m | Word attempt 2/2: 'AS' (score=42)
+[32m14:49:10[0m | [1mINFO   [0m | Placing tile 'A' (slot 3) -> board (8,17) | src=(1146.8,828.5) dst=(1345.5,457.7)
+[32m14:49:12[0m | [1mINFO   [0m | Tile 'A' verified at (8,17)
+[32m14:49:13[0m | [1mINFO   [0m | Placing tile 'S' (slot 4) -> board (9,17) | src=(1198.9,827.9) dst=(1349.0,493.5)
+[32m14:49:15[0m | [1mINFO   [0m | Tile 'S' verified at (9,17)
+[32m14:49:17[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1145.8, 752.0)
+[32m14:49:22[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1146.2, 749.5)
+[32m14:49:28[0m | [1mINFO   [0m | Word 'AS' rejected (attempt 2/2) — recalling tiles
+[32m14:49:28[0m | [1mINFO   [0m | Blacklisted rejected word 'as' (total: 304)
+[32m14:49:28[0m | [1mINFO   [0m | Clicking recall button at (1286.5, 749.1) (pass 1/4)
+[32m14:49:28[0m | [1mINFO   [0m | Clicking recall button at (1284.0, 752.4) (pass 2/4)
+[32m14:49:29[0m | [1mINFO   [0m | Clicking recall button at (1284.0, 748.1) (pass 3/4)
+[32m14:49:30[0m | [1mINFO   [0m | Clicking recall button at (1286.8, 753.8) (pass 4/4)
+[32m14:49:32[0m | [33m[1mWARNING[0m | All 2 word attempt(s) failed — returning to caller for re-vision
+[32m14:49:32[0m | [33m[1mWARNING[0m | No move accepted (candidates=5) — re-vision + swap fallback
+[32m14:49:35[0m | [1mINFO   [0m | Vision pipeline start — mode=wild
+[32m14:49:35[0m | [1mINFO   [0m | Preprocessing complete — 379885 bytes
+[32m14:49:35[0m | [1mINFO   [0m | Calling Claude Vision API — retry=False
+[32m14:49:40[0m | [1mINFO   [0m | Claude Vision response received — latency=4.90s  input_tokens=2903  output_tokens=304
+[32m14:49:40[0m | [1mINFO   [0m | Extraction complete (first attempt)
+[32m14:49:40[0m | [1mINFO   [0m | Position auto-correction: shifting tiles by (-3, -2) — multiplier matches 2 \u2192 6
+[32m14:49:40[0m | [1mINFO   [0m | Center star correction: shifting tiles by (+3, +4) to place a tile on (9,13) — multiplier score 5
+[32m14:49:40[0m | [1mINFO   [0m | Validation result — 5 error(s)
+[32m14:49:40[0m | [33m[1mWARNING[0m | Validation failed (5 errors), retrying: ["Floating tile 'A' at (7, 10) — not connected to other tiles", "Floating tile 'P' at (7, 12) — not connected to other tiles", "Floating tile 'E' at (7, 14) — not connected to other tiles", "Floating tile 'X' at (7, 16) — not connected to other tiles", 'Position accuracy suspect: 9/10 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:49:40[0m | [1mINFO   [0m | Calling Claude Vision API — retry=True
+[32m14:49:45[0m | [1mINFO   [0m | Claude Vision response received — latency=5.00s  input_tokens=3042  output_tokens=304
+[32m14:49:45[0m | [1mINFO   [0m | Extraction complete (retry)
+[32m14:49:45[0m | [1mINFO   [0m | Position auto-correction: shifting tiles by (-3, -2) — multiplier matches 2 \u2192 6
+[32m14:49:45[0m | [1mINFO   [0m | Center star correction: shifting tiles by (+5, +5) to place a tile on (9,13) — multiplier score 4
+[32m14:49:45[0m | [1mINFO   [0m | Merged 7 cell(s) from first attempt that retry dropped: [('A', 7, 10), ('P', 7, 12), ('E', 7, 14), ('X', 7, 16), ('I', 9, 10), ('A', 9, 12), ('I', 9, 14)]
+[32m14:49:45[0m | [1mINFO   [0m | Validation result after retry — 13 error(s)
+[32m14:49:45[0m | [33m[1mWARNING[0m | Removed 11 floating tile(s) to salvage extraction
+[32m14:49:45[0m | [33m[1mWARNING[0m | Word validity check failed (1 word(s)) after retry — proceeding with best-effort extraction: ["Invalid word(s) on board: 'IAAPIE' at row 9 cols 10-15, 'ALIC' at row 11 cols 15-18 — tile positions are likely off by 1. Re-count carefully from center star at (9,13)."]
+[32m14:49:45[0m | [33m[1mWARNING[0m | Position accuracy check failed after retry — proceeding with auto-corrected multipliers: ['Position accuracy suspect: 9/12 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:49:45[0m | [1mINFO   [0m | Vision anchor: pinned 10 known tile(s); dropped 6 drifted duplicate(s); corrected 0 vision letter(s) at known positions.
+[32m14:49:45[0m | [1mINFO   [0m | Vision pipeline complete — 10.26s  tiles=10  rack_size=7
+[32m14:49:45[0m | [1mINFO   [0m | Word attempt 1/2: 'SURAH' (score=56)
+[32m14:49:46[0m | [1mINFO   [0m | Placing tile 'S' (slot 0) -> board (9,17) | src=(981.7,830.7) dst=(1351.0,495.0)
+[32m14:49:48[0m | [1mINFO   [0m | Tile 'S' verified at (9,17)
+[32m14:49:49[0m | [1mINFO   [0m | Placing tile 'U' (slot 5) -> board (10,17) | src=(1258.3,829.6) dst=(1346.6,529.2)
+[32m14:49:51[0m | [1mINFO   [0m | Tile 'U' verified at (10,17)
+[32m14:49:52[0m | [1mINFO   [0m | Placing tile 'R' (slot 4) -> board (11,17) | src=(1200.1,831.2) dst=(1346.6,566.1)
+[32m14:49:54[0m | [1mINFO   [0m | Tile 'R' verified at (11,17)
+[32m14:49:55[0m | [1mINFO   [0m | Placing tile 'A' (slot 6) -> board (12,17) | src=(1311.2,831.1) dst=(1346.1,599.5)
+[32m14:49:57[0m | [1mINFO   [0m | Tile 'A' verified at (12,17)
+[32m14:49:58[0m | [1mINFO   [0m | Placing tile 'H' (slot 3) -> board (13,17) | src=(1148.6,828.4) dst=(1350.4,634.9)
+[32m14:50:00[0m | [1mINFO   [0m | Tile 'H' verified at (13,17)
+[32m14:50:02[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1146.3, 751.8)
+[32m14:50:07[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1146.6, 750.9)
+[32m14:50:13[0m | [1mINFO   [0m | Word 'SURAH' rejected (attempt 1/2) — recalling tiles
+[32m14:50:13[0m | [1mINFO   [0m | Blacklisted rejected word 'surah' (total: 305)
+[32m14:50:13[0m | [1mINFO   [0m | Clicking recall button at (1288.1, 751.6) (pass 1/7)
+[32m14:50:14[0m | [1mINFO   [0m | Clicking recall button at (1284.3, 748.7) (pass 2/7)
+[32m14:50:15[0m | [1mINFO   [0m | Clicking recall button at (1286.2, 751.3) (pass 3/7)
+[32m14:50:15[0m | [1mINFO   [0m | Clicking recall button at (1288.4, 750.8) (pass 4/7)
+[32m14:50:16[0m | [1mINFO   [0m | Clicking recall button at (1284.0, 753.7) (pass 5/7)
+[32m14:50:17[0m | [1mINFO   [0m | Clicking recall button at (1288.3, 752.6) (pass 6/7)
+[32m14:50:18[0m | [1mINFO   [0m | Clicking recall button at (1287.5, 752.7) (pass 7/7)
+[32m14:50:20[0m | [1mINFO   [0m | Word attempt 2/2: 'HAS' (score=46)
+[32m14:50:20[0m | [1mINFO   [0m | Placing tile 'H' (slot 3) -> board (7,17) | src=(1143.5,827.6) dst=(1349.2,427.9)
+[32m14:50:22[0m | [1mINFO   [0m | Tile 'H' verified at (7,17)
+[32m14:50:23[0m | [1mINFO   [0m | Placing tile 'A' (slot 6) -> board (8,17) | src=(1314.5,827.3) dst=(1347.9,460.9)
+[32m14:50:25[0m | [1mINFO   [0m | Tile 'A' verified at (8,17)
+[32m14:50:26[0m | [1mINFO   [0m | Placing tile 'S' (slot 0) -> board (9,17) | src=(977.2,828.6) dst=(1347.0,496.2)
+[32m14:50:28[0m | [1mINFO   [0m | Tile 'S' verified at (9,17)
+[32m14:50:30[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1145.0, 751.6)
+[32m14:50:35[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1145.7, 750.7)
+[32m14:50:41[0m | [1mINFO   [0m | Word 'HAS' rejected (attempt 2/2) — recalling tiles
+[32m14:50:41[0m | [1mINFO   [0m | Blacklisted rejected word 'has' (total: 306)
+[32m14:50:41[0m | [1mINFO   [0m | Clicking recall button at (1287.8, 748.1) (pass 1/5)
+[32m14:50:41[0m | [1mINFO   [0m | Clicking recall button at (1286.9, 749.0) (pass 2/5)
+[32m14:50:42[0m | [1mINFO   [0m | Clicking recall button at (1287.3, 751.0) (pass 3/5)
+[32m14:50:43[0m | [1mINFO   [0m | Clicking recall button at (1288.0, 748.5) (pass 4/5)
+[32m14:50:44[0m | [1mINFO   [0m | Clicking recall button at (1285.4, 751.0) (pass 5/5)
+[32m14:50:45[0m | [33m[1mWARNING[0m | All 2 word attempt(s) failed — performing tile swap fallback
+[32m14:50:46[0m | [33m[1mWARNING[0m | Falling back to tile swap at (1007.5, 751.7) — no valid words accepted after 2 attempts
+[32m14:50:46[0m | [1mINFO   [0m | Turn 6: no move accepted (swap/skip)
+[32m14:50:49[0m | [1mINFO   [0m | Turn state changed: None -> my_turn
+[32m14:50:50[0m | [1mINFO   [0m | Pre-turn recall click at (1285.9, 752.5) (pass 1/4)
+[32m14:50:51[0m | [1mINFO   [0m | Pre-turn recall click at (1286.0, 753.0) (pass 2/4)
+[32m14:50:52[0m | [1mINFO   [0m | Pre-turn recall click at (1284.6, 751.2) (pass 3/4)
+[32m14:50:52[0m | [1mINFO   [0m | Pre-turn recall click at (1283.6, 750.7) (pass 4/4)
+[32m14:50:57[0m | [1mINFO   [0m | Vision pipeline start — mode=wild
+[32m14:50:57[0m | [1mINFO   [0m | Preprocessing complete — 380764 bytes
+[32m14:50:57[0m | [1mINFO   [0m | Calling Claude Vision API — retry=False
+[32m14:51:02[0m | [1mINFO   [0m | Claude Vision response received — latency=4.70s  input_tokens=2903  output_tokens=304
+[32m14:51:02[0m | [1mINFO   [0m | Extraction complete (first attempt)
+[32m14:51:02[0m | [1mINFO   [0m | Validation result — 5 error(s)
+[32m14:51:02[0m | [33m[1mWARNING[0m | Validation failed (5 errors), retrying: ["Floating tile 'A' at (7, 11) — not connected to other tiles", "Floating tile 'P' at (7, 12) — not connected to other tiles", "Floating tile 'E' at (7, 13) — not connected to other tiles", "Floating tile 'X' at (7, 14) — not connected to other tiles", 'Position accuracy suspect: 8/10 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:51:02[0m | [1mINFO   [0m | Calling Claude Vision API — retry=True
+[32m14:51:08[0m | [1mINFO   [0m | Claude Vision response received — latency=6.69s  input_tokens=3042  output_tokens=417
+[32m14:51:08[0m | [1mINFO   [0m | Extraction complete (retry)
+[32m14:51:08[0m | [1mINFO   [0m | Merged 1 cell(s) from first attempt that retry dropped: [('A', 7, 11)]
+[32m14:51:08[0m | [1mINFO   [0m | Validation result after retry — 7 error(s)
+[32m14:51:08[0m | [33m[1mWARNING[0m | Removed 5 floating tile(s) to salvage extraction
+[32m14:51:08[0m | [33m[1mWARNING[0m | Word validity check failed (1 word(s)) after retry — proceeding with best-effort extraction: ["Invalid word(s) on board: 'AAPEX' at row 7 cols 11-15 — tile positions are likely off by 1. Re-count carefully from center star at (9,13)."]
+[32m14:51:08[0m | [33m[1mWARNING[0m | Position accuracy check failed after retry — proceeding with auto-corrected multipliers: ['Position accuracy suspect: 8/10 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:51:08[0m | [1mINFO   [0m | Vision anchor: pinned 10 known tile(s); dropped 6 drifted duplicate(s); corrected 0 vision letter(s) at known positions.
+[32m14:51:08[0m | [1mINFO   [0m | Vision pipeline complete — 11.73s  tiles=10  rack_size=7
+[32m14:51:09[0m | [1mINFO   [0m | Word attempt 1/2: 'SHURA' (score=56)
+[32m14:51:09[0m | [1mINFO   [0m | Placing tile 'S' (slot 0) -> board (9,17) | src=(981.8,828.7) dst=(1350.5,491.9)
+[32m14:51:11[0m | [1mINFO   [0m | Tile 'S' verified at (9,17)
+[32m14:51:11[0m | [1mINFO   [0m | Placing tile 'H' (slot 4) -> board (10,17) | src=(1198.4,831.4) dst=(1346.9,530.9)
+[32m14:51:14[0m | [1mINFO   [0m | Tile 'H' verified at (10,17)
+[32m14:51:15[0m | [1mINFO   [0m | Placing tile 'U' (slot 1) -> board (11,17) | src=(1038.2,827.8) dst=(1346.3,564.7)
+[32m14:51:17[0m | [1mINFO   [0m | Tile 'U' verified at (11,17)
+[32m14:51:17[0m | [1mINFO   [0m | Placing tile 'R' (slot 6) -> board (12,17) | src=(1312.8,828.5) dst=(1346.9,600.1)
+[32m14:51:20[0m | [1mINFO   [0m | Tile 'R' verified at (12,17)
+[32m14:51:20[0m | [1mINFO   [0m | Placing tile 'A' (slot 2) -> board (13,17) | src=(1089.2,827.0) dst=(1346.3,632.2)
+[32m14:51:23[0m | [1mINFO   [0m | Tile 'A' verified at (13,17)
+[32m14:51:24[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1147.8, 750.2)
+[32m14:51:29[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1145.9, 753.4)
+[32m14:51:34[0m | [1mINFO   [0m | Word 'SHURA' rejected (attempt 1/2) — recalling tiles
+[32m14:51:34[0m | [1mINFO   [0m | Blacklisted rejected word 'shura' (total: 307)
+[32m14:51:34[0m | [1mINFO   [0m | Clicking recall button at (1284.8, 750.7) (pass 1/7)
+[32m14:51:35[0m | [1mINFO   [0m | Clicking recall button at (1283.1, 753.3) (pass 2/7)
+[32m14:51:35[0m | [1mINFO   [0m | Clicking recall button at (1288.2, 753.7) (pass 3/7)
+[32m14:51:36[0m | [1mINFO   [0m | Clicking recall button at (1285.9, 749.4) (pass 4/7)
+[32m14:51:37[0m | [1mINFO   [0m | Clicking recall button at (1288.6, 749.6) (pass 5/7)
+[32m14:51:38[0m | [1mINFO   [0m | Clicking recall button at (1282.8, 750.0) (pass 6/7)
+[32m14:51:39[0m | [1mINFO   [0m | Clicking recall button at (1282.7, 751.9) (pass 7/7)
+[32m14:51:40[0m | [1mINFO   [0m | Word attempt 2/2: 'US' (score=42)
+[32m14:51:40[0m | [1mINFO   [0m | Placing tile 'U' (slot 1) -> board (8,17) | src=(1036.2,830.9) dst=(1349.7,457.6)
+[32m14:51:42[0m | [1mINFO   [0m | Tile 'U' verified at (8,17)
+[32m14:51:43[0m | [1mINFO   [0m | Placing tile 'S' (slot 0) -> board (9,17) | src=(981.8,827.7) dst=(1350.9,493.5)
+[32m14:51:45[0m | [1mINFO   [0m | Tile 'S' verified at (9,17)
+[32m14:51:46[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1145.4, 753.9)
+[32m14:51:51[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1146.4, 749.8)
+[32m14:51:56[0m | [1mINFO   [0m | Word 'US' rejected (attempt 2/2) — recalling tiles
+[32m14:51:56[0m | [1mINFO   [0m | Blacklisted rejected word 'us' (total: 308)
+[32m14:51:56[0m | [1mINFO   [0m | Clicking recall button at (1287.9, 752.5) (pass 1/4)
+[32m14:51:57[0m | [1mINFO   [0m | Clicking recall button at (1283.9, 751.8) (pass 2/4)
+[32m14:51:58[0m | [1mINFO   [0m | Clicking recall button at (1286.8, 754.0) (pass 3/4)
+[32m14:51:59[0m | [1mINFO   [0m | Clicking recall button at (1287.0, 752.0) (pass 4/4)
+[32m14:52:00[0m | [33m[1mWARNING[0m | All 2 word attempt(s) failed — returning to caller for re-vision
+[32m14:52:00[0m | [33m[1mWARNING[0m | No move accepted (candidates=5) — re-vision + swap fallback
+[32m14:52:04[0m | [1mINFO   [0m | Vision pipeline start — mode=wild
+[32m14:52:04[0m | [1mINFO   [0m | Preprocessing complete — 376956 bytes
+[32m14:52:04[0m | [1mINFO   [0m | Calling Claude Vision API — retry=False
+[32m14:52:09[0m | [1mINFO   [0m | Claude Vision response received — latency=5.46s  input_tokens=2903  output_tokens=309
+[32m14:52:09[0m | [1mINFO   [0m | Extraction complete (first attempt)
+[32m14:52:09[0m | [1mINFO   [0m | Validation result — 5 error(s)
+[32m14:52:09[0m | [33m[1mWARNING[0m | Validation failed (5 errors), retrying: ["Floating tile 'A' at (7, 11) — not connected to other tiles", "Floating tile 'P' at (7, 12) — not connected to other tiles", "Floating tile 'E' at (7, 13) — not connected to other tiles", "Floating tile 'X' at (7, 14) — not connected to other tiles", 'Position accuracy suspect: 8/10 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:52:09[0m | [1mINFO   [0m | Calling Claude Vision API — retry=True
+[32m14:52:15[0m | [1mINFO   [0m | Claude Vision response received — latency=5.18s  input_tokens=3042  output_tokens=311
+[32m14:52:15[0m | [1mINFO   [0m | Extraction complete (retry)
+[32m14:52:15[0m | [1mINFO   [0m | Validation result after retry — 5 error(s)
+[32m14:52:15[0m | [33m[1mWARNING[0m | Removed 4 floating tile(s) to salvage extraction
+[32m14:52:15[0m | [33m[1mWARNING[0m | Position accuracy check failed after retry — proceeding with auto-corrected multipliers: ['Position accuracy suspect: 8/10 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:52:15[0m | [1mINFO   [0m | Vision anchor: pinned 10 known tile(s); dropped 6 drifted duplicate(s); corrected 0 vision letter(s) at known positions.
+[32m14:52:15[0m | [1mINFO   [0m | Vision pipeline complete — 10.81s  tiles=10  rack_size=7
+[32m14:52:15[0m | [1mINFO   [0m | Word attempt 1/2: 'ITALICIZE' (score=168)
+[32m14:52:15[0m | [1mINFO   [0m | Placing tile 'I' (slot 3) -> board (9,17) | src=(1146.3,829.4) dst=(1346.3,493.5)
+[32m14:52:17[0m | [1mINFO   [0m | Tile 'I' verified at (9,17)
+[32m14:52:17[0m | [1mINFO   [0m | Placing tile 'Z' (slot 6) -> board (9,18) | src=(1312.4,830.5) dst=(1399.9,494.3)
+[32m14:52:19[0m | [1mINFO   [0m | Tile 'Z' verified at (9,18)
+[32m14:52:20[0m | [1mINFO   [0m | Placing tile 'E' (slot 2) -> board (9,19) | src=(1090.9,829.5) dst=(1450.4,492.5)
+[32m14:52:22[0m | [1mINFO   [0m | Tile 'E' verified at (9,19)
+[32m14:52:23[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1147.1, 752.8)
+[32m14:52:25[0m | [1mINFO   [0m | Word 'ITALICIZE' accepted! (score=168, attempt 1/2)
+[32m14:52:25[0m | [1mINFO   [0m | Turn 7: played 'ITALICIZE' (score=168)
+[32m14:52:28[0m | [1mINFO   [0m | Turn state changed: None -> not_my_turn
+[32m14:52:33[0m | [1mINFO   [0m | Turn state changed: not_my_turn -> my_turn
+[32m14:52:34[0m | [1mINFO   [0m | Pre-turn recall click at (1284.2, 750.0) (pass 1/4)
+[32m14:52:35[0m | [1mINFO   [0m | Pre-turn recall click at (1282.7, 749.3) (pass 2/4)
+[32m14:52:35[0m | [1mINFO   [0m | Pre-turn recall click at (1286.1, 748.5) (pass 3/4)
+[32m14:52:36[0m | [1mINFO   [0m | Pre-turn recall click at (1286.9, 748.5) (pass 4/4)
+[32m14:52:40[0m | [1mINFO   [0m | Vision pipeline start — mode=wild
+[32m14:52:40[0m | [1mINFO   [0m | Preprocessing complete — 386599 bytes
+[32m14:52:40[0m | [1mINFO   [0m | Calling Claude Vision API — retry=False
+[32m14:52:45[0m | [1mINFO   [0m | Claude Vision response received — latency=5.06s  input_tokens=2903  output_tokens=380
+[32m14:52:45[0m | [1mINFO   [0m | Extraction complete (first attempt)
+[32m14:52:45[0m | [1mINFO   [0m | Validation result — 5 error(s)
+[32m14:52:45[0m | [33m[1mWARNING[0m | Validation failed (5 errors), retrying: ["Floating tile 'A' at (7, 9) — not connected to other tiles", "Floating tile 'P' at (7, 10) — not connected to other tiles", "Floating tile 'E' at (7, 11) — not connected to other tiles", "Floating tile 'X' at (7, 12) — not connected to other tiles", 'Position accuracy suspect: 12/13 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:52:45[0m | [1mINFO   [0m | Calling Claude Vision API — retry=True
+[32m14:52:52[0m | [1mINFO   [0m | Claude Vision response received — latency=6.99s  input_tokens=3042  output_tokens=519
+[32m14:52:52[0m | [1mINFO   [0m | Extraction complete (retry)
+[32m14:52:52[0m | [1mINFO   [0m | Validation result after retry — 5 error(s)
+[32m14:52:52[0m | [33m[1mWARNING[0m | Removed 4 floating tile(s) to salvage extraction
+[32m14:52:52[0m | [33m[1mWARNING[0m | Position accuracy check failed after retry — proceeding with auto-corrected multipliers: ['Position accuracy suspect: 13/13 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:52:52[0m | [1mINFO   [0m | Vision anchor: pinned 13 known tile(s); dropped 9 drifted duplicate(s); corrected 0 vision letter(s) at known positions.
+[32m14:52:52[0m | [1mINFO   [0m | Vision pipeline complete — 12.22s  tiles=13  rack_size=7
+[32m14:52:52[0m | [1mINFO   [0m | Word attempt 1/2: 'ELF' (score=47)
+[32m14:52:53[0m | [1mINFO   [0m | Placing tile 'E' (slot 5) -> board (10,12) | src=(1258.8,826.8) dst=(1092.7,529.3)
+[32m14:52:55[0m | [1mINFO   [0m | Tile 'E' verified at (10,12)
+[32m14:52:55[0m | [1mINFO   [0m | Placing tile 'L' (slot 0) -> board (10,13) | src=(980.4,828.7) dst=(1146.1,531.4)
+[32m14:52:57[0m | [1mINFO   [0m | Tile 'L' verified at (10,13)
+[32m14:52:58[0m | [1mINFO   [0m | Placing tile 'F' (slot 2) -> board (10,14) | src=(1091.4,829.8) dst=(1195.7,528.8)
+[32m14:53:00[0m | [1mINFO   [0m | Tile 'F' verified at (10,14)
+[32m14:53:01[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1145.3, 752.1)
+[32m14:53:03[0m | [1mINFO   [0m | Word 'ELF' accepted! (score=47, attempt 1/2)
+[32m14:53:03[0m | [1mINFO   [0m | Turn 8: played 'ELF' (score=47)
+[32m14:53:06[0m | [1mINFO   [0m | Turn state changed: None -> not_my_turn
+[32m14:53:11[0m | [1mINFO   [0m | Turn state changed: not_my_turn -> my_turn
+[32m14:53:12[0m | [1mINFO   [0m | Pre-turn recall click at (1283.8, 748.9) (pass 1/4)
+[32m14:53:12[0m | [1mINFO   [0m | Pre-turn recall click at (1286.1, 748.1) (pass 2/4)
+[32m14:53:13[0m | [1mINFO   [0m | Pre-turn recall click at (1284.2, 753.0) (pass 3/4)
+[32m14:53:14[0m | [1mINFO   [0m | Pre-turn recall click at (1286.0, 750.6) (pass 4/4)
+[32m14:53:18[0m | [1mINFO   [0m | Vision pipeline start — mode=wild
+[32m14:53:18[0m | [1mINFO   [0m | Preprocessing complete — 391617 bytes
+[32m14:53:18[0m | [1mINFO   [0m | Calling Claude Vision API — retry=False
+[32m14:53:25[0m | [1mINFO   [0m | Claude Vision response received — latency=6.39s  input_tokens=2903  output_tokens=454
+[32m14:53:25[0m | [1mINFO   [0m | Extraction complete (first attempt)
+[32m14:53:25[0m | [1mINFO   [0m | Validation result — 6 error(s)
+[32m14:53:25[0m | [33m[1mWARNING[0m | Validation failed (6 errors), retrying: ["Floating tile 'A' at (7, 11) — not connected to other tiles", "Floating tile 'P' at (7, 12) — not connected to other tiles", "Floating tile 'E' at (7, 13) — not connected to other tiles", "Floating tile 'X' at (7, 14) — not connected to other tiles", 'Position accuracy suspect: 14/16 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.', "Invalid word(s) on board: 'IE' at col 11 rows 9-10, 'TL' at col 12 rows 9-10, 'AF' at col 13 rows 9-10 — tile positions are likely off by 1. Re-count carefully from center star at (9,13)."]
+[32m14:53:25[0m | [1mINFO   [0m | Calling Claude Vision API — retry=True
+[32m14:53:32[0m | [1mINFO   [0m | Claude Vision response received — latency=7.88s  input_tokens=3120  output_tokens=622
+[32m14:53:32[0m | [1mINFO   [0m | Extraction complete (retry)
+[32m14:53:32[0m | [1mINFO   [0m | Merged 2 cell(s) from first attempt that retry dropped: [('A', 7, 11), ('E', 10, 11)]
+[32m14:53:32[0m | [1mINFO   [0m | Validation result after retry — 7 error(s)
+[32m14:53:32[0m | [33m[1mWARNING[0m | Removed 5 floating tile(s) to salvage extraction
+[32m14:53:32[0m | [33m[1mWARNING[0m | Word validity check failed (1 word(s)) after retry — proceeding with best-effort extraction: ["Invalid word(s) on board: 'AAPEX' at row 7 cols 11-15, 'IE' at col 11 rows 9-10, 'LF' at col 14 rows 9-10, 'EELF' at row 10 cols 11-14 — tile positions are likely off by 1. Re-count carefully from center star at (9,13)."]
+[32m14:53:32[0m | [33m[1mWARNING[0m | Position accuracy check failed after retry — proceeding with auto-corrected multipliers: ['Position accuracy suspect: 11/16 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:53:32[0m | [1mINFO   [0m | Vision anchor: pinned 16 known tile(s); dropped 13 drifted duplicate(s); corrected 0 vision letter(s) at known positions.
+[32m14:53:32[0m | [1mINFO   [0m | Vision pipeline complete — 14.45s  tiles=16  rack_size=7
+[32m14:53:33[0m | [1mINFO   [0m | Word attempt 1/2: 'THEWY' (score=44)
+[32m14:53:33[0m | [1mINFO   [0m | Placing tile 'T' (slot 0) -> board (7,19) | src=(980.7,826.4) dst=(1451.8,427.6)
+[32m14:53:35[0m | [1mINFO   [0m | Tile 'T' verified at (7,19)
+[32m14:53:35[0m | [1mINFO   [0m | Placing tile 'H' (slot 2) -> board (8,19) | src=(1089.2,831.0) dst=(1449.4,460.7)
+[32m14:53:37[0m | [1mINFO   [0m | Tile 'H' verified at (8,19)
+[32m14:53:38[0m | [1mINFO   [0m | Placing tile 'W' (slot 3) -> board (10,19) | src=(1148.0,828.6) dst=(1450.0,529.8)
+[32m14:53:40[0m | [1mINFO   [0m | Tile 'W' verified at (10,19)
+[32m14:53:41[0m | [1mINFO   [0m | Placing tile 'Y' (slot 5) -> board (11,19) | src=(1256.5,826.0) dst=(1446.8,564.5)
+[32m14:53:43[0m | [1mINFO   [0m | Tile 'Y' verified at (11,19)
+[32m14:53:44[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1144.7, 751.4)
+[32m14:53:45[0m | [1mINFO   [0m | Word 'THEWY' accepted! (score=44, attempt 1/2)
+[32m14:53:45[0m | [1mINFO   [0m | Turn 9: played 'THEWY' (score=44)
+[32m14:53:49[0m | [1mINFO   [0m | Turn state changed: None -> not_my_turn
+[32m14:53:53[0m | [1mINFO   [0m | Turn state changed: not_my_turn -> my_turn
+[32m14:53:54[0m | [1mINFO   [0m | Pre-turn recall click at (1286.1, 753.2) (pass 1/4)
+[32m14:53:55[0m | [1mINFO   [0m | Pre-turn recall click at (1287.5, 751.8) (pass 2/4)
+[32m14:53:56[0m | [1mINFO   [0m | Pre-turn recall click at (1284.4, 750.9) (pass 3/4)
+[32m14:53:57[0m | [1mINFO   [0m | Pre-turn recall click at (1285.2, 753.7) (pass 4/4)
+[32m14:54:01[0m | [1mINFO   [0m | Vision pipeline start — mode=wild
+[32m14:54:01[0m | [1mINFO   [0m | Preprocessing complete — 396579 bytes
+[32m14:54:01[0m | [1mINFO   [0m | Calling Claude Vision API — retry=False
+[32m14:54:09[0m | [1mINFO   [0m | Claude Vision response received — latency=7.68s  input_tokens=2903  output_tokens=504
+[32m14:54:09[0m | [1mINFO   [0m | Extraction complete (first attempt)
+[32m14:54:09[0m | [1mINFO   [0m | Validation result — 8 error(s)
+[32m14:54:09[0m | [33m[1mWARNING[0m | Validation failed (8 errors), retrying: ["Floating tile 'A' at (7, 9) — not connected to other tiles", "Floating tile 'P' at (7, 11) — not connected to other tiles", "Floating tile 'E' at (7, 12) — not connected to other tiles", "Floating tile 'X' at (7, 14) — not connected to other tiles", "Floating tile 'T' at (7, 20) — not connected to other tiles", "Floating tile 'W' at (9, 20) — not connected to other tiles", 'Position accuracy suspect: 16/18 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.', "Invalid word(s) on board: 'LF' at col 11 rows 9-10 — tile positions are likely off by 1. Re-count carefully from center star at (9,13)."]
+[32m14:54:09[0m | [1mINFO   [0m | Calling Claude Vision API — retry=True
+[32m14:54:19[0m | [1mINFO   [0m | Claude Vision response received — latency=10.03s  input_tokens=3132  output_tokens=696
+[32m14:54:19[0m | [1mINFO   [0m | Extraction complete (retry)
+[32m14:54:19[0m | [1mINFO   [0m | Validation result after retry — 8 error(s)
+[32m14:54:19[0m | [33m[1mWARNING[0m | Removed 6 floating tile(s) to salvage extraction
+[32m14:54:19[0m | [33m[1mWARNING[0m | Word validity check failed (1 word(s)) after retry — proceeding with best-effort extraction: ["Invalid word(s) on board: 'LF' at col 11 rows 9-10 — tile positions are likely off by 1. Re-count carefully from center star at (9,13)."]
+[32m14:54:19[0m | [33m[1mWARNING[0m | Position accuracy check failed after retry — proceeding with auto-corrected multipliers: ['Position accuracy suspect: 16/18 multiplier mismatches — tile coordinates may be off. Re-count positions using the center star at (9,13) as reference.']
+[32m14:54:19[0m | [1mINFO   [0m | Vision anchor: pinned 20 known tile(s); dropped 11 drifted duplicate(s); corrected 0 vision letter(s) at known positions.
+[32m14:54:19[0m | [1mINFO   [0m | Vision pipeline complete — 17.89s  tiles=21  rack_size=7
+[32m14:54:19[0m | [1mINFO   [0m | Word attempt 1/2: 'ITALICIZES' (score=176)
+[32m14:54:19[0m | [1mINFO   [0m | Placing tile 'S' (slot 1) -> board (9,20) | src=(1038.2,830.7) dst=(1499.6,494.4)
+[32m14:54:21[0m | [1mINFO   [0m | Tile 'S' verified at (9,20)
+[32m14:54:22[0m | [1mINFO   [0m | Clicking confirm/PLAY button at (1147.1, 752.9)
+[32m14:54:24[0m | [1mINFO   [0m | Word 'ITALICIZES' accepted! (score=176, attempt 1/2)
+[32m14:54:24[0m | [1mINFO   [0m | Turn 10: played 'ITALICIZES' (score=176)
+[32m14:54:24[0m | [1mINFO   [0m | Reached max_turns=10 — exiting cleanly
+[32m14:54:24[0m | [1mINFO   [0m | Headless autoplay finished in 934.8s

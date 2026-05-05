@@ -1,0 +1,4 @@
+[auto_debug 01:00:27] using claude CLI at: C:\Users\Ninja\.local\bin\claude.EXE
+[auto_debug 01:00:27] pre-existing dirty .py files (excluded from smoke): ['scripts/auto_debug.py', 'src/browser/navigator.py']
+[auto_debug 01:00:27] === iteration 1/10 ===
+[auto_debug 01:00:27] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 0 --mode wild  (timeout=3600s)

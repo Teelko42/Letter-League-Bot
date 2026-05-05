@@ -1,76 +1,8 @@
-[auto_debug 10:50:44] using claude CLI at: C:\Users\Ninja\.local\bin\claude.EXE
-[auto_debug 10:50:44] === iteration 1/10 ===
-[auto_debug 10:50:44] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 5 --mode wild  (timeout=1800s)
-[auto_debug 11:31:14] run finished: exit=-9  duration=2429.8s  sig=ec19b0598068
-[auto_debug 11:31:15] wrote context bundle -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_001.md
-[auto_debug 11:31:15] invoking claude (timeout=900s, acceptEdits)
-[auto_debug 11:37:01] ok — claude response -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_001_response.md
-[auto_debug 11:37:01] sleeping 5s before next run
-[auto_debug 11:37:06] === iteration 2/10 ===
-[auto_debug 11:37:06] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 5 --mode wild  (timeout=1800s)
-[auto_debug 12:07:06] run finished: exit=-9  duration=1800.4s  sig=61a2bd105ecd
-[auto_debug 12:07:06] wrote context bundle -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_002.md
-[auto_debug 12:07:06] invoking claude (timeout=900s, acceptEdits)
-[auto_debug 12:22:07] claude invocation timed out after 900s
-[auto_debug 12:22:07] FAIL — claude response -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_002_response.md
-[auto_debug 12:22:07] claude returned non-zero; continuing anyway to let the next run expose state
-[auto_debug 12:22:07] sleeping 5s before next run
-[auto_debug 12:22:12] === iteration 3/10 ===
-[auto_debug 12:22:12] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 5 --mode wild  (timeout=1800s)
-[auto_debug 13:32:03] run finished: exit=-9  duration=4195.8s  sig=4713a6f9b244
-[auto_debug 13:32:04] wrote context bundle -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_003.md
-[auto_debug 13:32:04] invoking claude (timeout=900s, acceptEdits)
-[auto_debug 14:41:14] claude invocation timed out after 900s
-[auto_debug 14:41:14] FAIL — claude response -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_003_response.md
-[auto_debug 14:41:14] claude returned non-zero; continuing anyway to let the next run expose state
-[auto_debug 14:41:14] sleeping 5s before next run
-[auto_debug 14:41:19] === iteration 4/10 ===
-[auto_debug 14:41:19] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 5 --mode wild  (timeout=1800s)
-[auto_debug 15:02:42] run finished: exit=0  duration=1283.3s  sig=53b2dd5bd30a
-[auto_debug 15:02:42] Clean exit but only 1 turns observed — treating as partial and continuing.
-[auto_debug 15:02:43] wrote context bundle -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_004.md
-[auto_debug 15:02:43] invoking claude (timeout=900s, acceptEdits)
-[auto_debug 15:11:30] ok — claude response -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_004_response.md
-[auto_debug 15:11:30] sleeping 5s before next run
-[auto_debug 15:11:35] === iteration 5/10 ===
-[auto_debug 15:11:35] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 5 --mode wild  (timeout=1800s)
-[auto_debug 15:40:41] run finished: exit=0  duration=1746.0s  sig=a8752ce119c8
-[auto_debug 15:40:41] Clean exit but only 1 turns observed — treating as partial and continuing.
-[auto_debug 15:40:41] wrote context bundle -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_005.md
-[auto_debug 15:40:41] invoking claude (timeout=900s, acceptEdits)
-[auto_debug 15:44:58] ok — claude response -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_005_response.md
-[auto_debug 15:44:58] sleeping 5s before next run
-[auto_debug 15:45:03] === iteration 6/10 ===
-[auto_debug 15:45:03] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 5 --mode wild  (timeout=1800s)
-[auto_debug 16:35:04] run finished: exit=-9  duration=3014.4s  sig=a0c59ed74500
-[auto_debug 16:35:05] wrote context bundle -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_006.md
-[auto_debug 16:35:05] invoking claude (timeout=900s, acceptEdits)
-[auto_debug 16:40:22] ok — claude response -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_006_response.md
-[auto_debug 16:40:22] sleeping 5s before next run
-[auto_debug 16:40:27] === iteration 7/10 ===
-[auto_debug 16:40:27] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 5 --mode wild  (timeout=1800s)
-[auto_debug 17:04:26] run finished: exit=0  duration=1439.0s  sig=dec71d3cf183
-[auto_debug 17:04:26] Clean exit but only 0 turns observed — treating as partial and continuing.
-[auto_debug 17:04:27] wrote context bundle -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_007.md
-[auto_debug 17:04:27] invoking claude (timeout=900s, acceptEdits)
-[auto_debug 17:39:48] claude invocation timed out after 900s
-[auto_debug 17:39:48] FAIL — claude response -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_007_response.md
-[auto_debug 17:39:48] claude returned non-zero; continuing anyway to let the next run expose state
-[auto_debug 17:39:48] sleeping 5s before next run
-[auto_debug 17:39:54] === iteration 8/10 ===
-[auto_debug 17:39:54] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 5 --mode wild  (timeout=1800s)
-[auto_debug 18:09:55] run finished: exit=-9  duration=1801.7s  sig=57b8cba597dd
-[auto_debug 18:09:56] wrote context bundle -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_008.md
-[auto_debug 18:09:56] invoking claude (timeout=900s, acceptEdits)
-[auto_debug 18:16:27] ok — claude response -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_008_response.md
-[auto_debug 18:16:27] sleeping 5s before next run
-[auto_debug 18:16:32] === iteration 9/10 ===
-[auto_debug 18:16:32] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 5 --mode wild  (timeout=1800s)
-[auto_debug 02:05:08] run finished: exit=-9  duration=114536.1s  sig=62b26e713bbc
-[auto_debug 02:05:09] wrote context bundle -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_009.md
-[auto_debug 02:05:09] invoking claude (timeout=900s, acceptEdits)
-[auto_debug 02:05:39] FAIL — claude response -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_009_response.md
-[auto_debug 02:05:39] claude returned non-zero; continuing anyway to let the next run expose state
-[auto_debug 02:05:39] sleeping 5s before next run
-[auto_debug 02:05:44] === iteration 10/10 ===
-[auto_debug 02:05:44] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 5 --mode wild  (timeout=1800s)
+[auto_debug 13:58:26] using claude CLI at: C:\Users\Ninja\.local\bin\claude.EXE
+[auto_debug 13:58:26] pre-existing dirty .py files (excluded from smoke): ['scripts/auto_debug.py', 'src/browser/navigator.py', 'src/browser/tile_placer.py', 'src/vision/__init__.py']
+[auto_debug 13:58:26] === iteration 1/10 ===
+[auto_debug 13:58:26] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 10 --mode wild  (timeout=1800s)
+[auto_debug 14:27:09] run finished: exit=0  duration=1722.3s  sig=3f00468e8ebc  placed=3  skipped=7  terminal=True
+[auto_debug 14:27:09] Clean exit but only 3 word(s) placed (need >= 8) — treating as partial and continuing.
+[auto_debug 14:27:09] wrote context bundle -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_001.md
+[auto_debug 14:27:09] invoking claude (timeout=900s, acceptEdits)

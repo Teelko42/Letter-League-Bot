@@ -80,6 +80,138 @@ def _strip_empty_cells(data: dict) -> None:
         data["board"]["cells"] = filtered
 
 
+def _detect_uniform_shift(
+    first_cells: list[dict],
+    retry_cells: list[dict],
+) -> tuple[int, int] | None:
+    """Detect whether ``retry_cells`` is a uniform translation of ``first_cells``.
+
+    The Vision API often re-reads the board with every tile shifted by 1-3
+    cells in either direction — same letters, same relative layout, just
+    anchored to a different origin.  Both reads are equally valid views of
+    the same physical tiles, so the merge-back logic in ``extract_board_state``
+    must not treat the first read's cells as "dropped" when this happens
+    (re-adding them creates phantom duplicates that pollute engine state).
+
+    Returns the dominant ``(dr, dc)`` if the retry is a clear uniform shift
+    of the first attempt, else ``None``.  "Clear" means: at least 60% of
+    first-attempt cells have a same-letter retry counterpart at a single
+    consistent ``(dr, dc)``, and at least 2 cells participate in the agreement
+    (single-letter shifts are too coincidental to act on).
+    """
+    if len(first_cells) < 2 or len(retry_cells) < 2:
+        return None
+
+    # Build a letter -> [retry positions] index for fast lookup.
+    by_letter: dict[str, list[tuple[int, int]]] = {}
+    for rc in retry_cells:
+        by_letter.setdefault(rc["letter"], []).append((rc["row"], rc["col"]))
+
+    deltas: Counter[tuple[int, int]] = Counter()
+    for fc in first_cells:
+        candidates = by_letter.get(fc["letter"])
+        if not candidates:
+            continue
+        # Pick the closest retry cell with matching letter — minimises
+        # spurious cross-pairings when a letter appears multiple times.
+        closest = min(
+            candidates,
+            key=lambda rp: abs(rp[0] - fc["row"]) + abs(rp[1] - fc["col"]),
+        )
+        deltas[(closest[0] - fc["row"], closest[1] - fc["col"])] += 1
+
+    if not deltas:
+        return None
+
+    (dr, dc), count = deltas.most_common(1)[0]
+    threshold = max(2, int(len(first_cells) * 0.6))
+    if count >= threshold:
+        return (dr, dc)
+    return None
+
+
+def _anchor_to_known_tiles(
+    data: dict,
+    known_tiles: dict[tuple[int, int], str],
+) -> None:
+    """Authoritatively pin known-correct tiles into the vision data.
+
+    For every position the bot has previously placed and had accepted, drop
+    whatever vision currently thinks is at that position and re-inject the
+    known ``(row, col, letter)`` tile. Cells vision reports at any other
+    position are kept — they're the bot's best guess at opponent's tiles.
+
+    Why this is the right shape rather than a global shift correction:
+    in real failure cases the drift on dense boards is *not* uniform — one
+    word may be misread as ``(-1, -2)`` while another adjacent word is
+    ``(-1, 0)``. A single global shift fixes one and breaks the other.
+    Pinning known cells in place is unconditionally correct; remaining
+    vision cells (opponent's tiles) keep whatever positional error vision
+    introduced, but they are the minority and the engine can still build
+    moves through the dense block of authoritatively-positioned anchors.
+
+    Also drops any vision cell that conflicts with a *non-anchored*
+    known-position — defensive, since duplicates would later cause the
+    Board.place_tile call to overwrite our anchor.
+    """
+    cells = data["board"]["cells"]
+    known_positions = set(known_tiles.keys())
+
+    # Step A: identify vision cells that are likely *drifted views* of our
+    # known tiles. For each known tile, the same-letter vision cell closest
+    # to its known position (within a 5-cell manhattan radius) is treated
+    # as a duplicate of that tile and dropped. Without this, a known
+    # tile pinned at (9,15) would coexist with vision's drifted copy at,
+    # say, (8,13) and the engine would see the same letter twice.
+    duplicates: set[int] = set()
+    claimed: set[int] = set()
+    for (kr, kc), kletter in known_tiles.items():
+        best_id = None
+        best_dist = 6
+        for c in cells:
+            if id(c) in claimed:
+                continue
+            if c["letter"] != kletter:
+                continue
+            dist = abs(c["row"] - kr) + abs(c["col"] - kc)
+            if dist < best_dist:
+                best_dist = dist
+                best_id = id(c)
+        if best_id is not None:
+            duplicates.add(best_id)
+            claimed.add(best_id)
+
+    overwritten = 0
+    kept: list[dict] = []
+    for c in cells:
+        pos = (c["row"], c["col"])
+        if id(c) in duplicates:
+            continue
+        if pos in known_positions:
+            if c["letter"] != known_tiles[pos]:
+                overwritten += 1
+            continue  # also drop — we'll inject the authoritative version below
+        kept.append(c)
+
+    # Step B: inject authoritative known tiles.
+    injected = 0
+    for (row, col), letter in known_tiles.items():
+        kept.append({
+            "row": row, "col": col, "letter": letter,
+            "is_blank": False, "multiplier": "NONE",
+        })
+        injected += 1
+
+    data["board"]["cells"] = kept
+
+    if injected or overwritten or duplicates:
+        logger.info(
+            "Vision anchor: pinned {} known tile(s); dropped {} drifted "
+            "duplicate(s); corrected {} vision letter(s) at known positions.",
+            injected, len(duplicates), overwritten,
+        )
+
+
 def _normalize_letters(data: dict) -> None:
     """Normalize letter strings on board cells and rack tiles in-place.
 
@@ -117,6 +249,7 @@ async def extract_board_state(
     img_bytes: bytes,
     mode: str = "classic",
     gaddag: GADDAG | None = None,
+    known_tiles: dict[tuple[int, int], str] | None = None,
 ) -> tuple[Board, list[str]]:
     """Extract board state from a Letter League screenshot.
 
@@ -131,6 +264,17 @@ async def extract_board_state(
         img_bytes: Raw image bytes (PNG, JPEG, or any OpenCV-supported format).
         mode: Board tile placement mode — 'classic' or 'wild'. Passed through
             to Board.place_tile for each extracted tile.
+        known_tiles: Optional ``{(row, col): letter}`` of tiles the bot has
+            already confirmed on the board (from previous accepted moves).
+            Used as anchor points: the pipeline detects whether the Vision
+            API's read is uniformly shifted relative to these known-correct
+            positions and applies the inverse shift, then authoritatively
+            overwrites cells at known positions with their known letters.
+            This stops vision drift on dense boards from feeding the engine
+            a phantom board state, which was the dominant cause of "valid
+            words rejected" turns (the engine generates a play valid in
+            its drifted view, but Letter League rejects it because the real
+            board doesn't match).
 
     Returns:
         A tuple (board, rack) where:
@@ -222,16 +366,33 @@ async def extract_board_state(
             # the retry may drop that tile to satisfy word validation, losing the
             # position entirely.  Re-adding the cell ensures the engine checks
             # cross-words at that column/row.
-            retry_positions = {(c["row"], c["col"]) for c in data["board"]["cells"]}
-            dropped = [c for c in first_attempt_cells if (c["row"], c["col"]) not in retry_positions]
-            if dropped:
-                for cell in dropped:
-                    data["board"]["cells"].append(cell)
+            #
+            # Shift guard: if the retry is a uniform translation of the first
+            # attempt (same letters, shifted by a consistent (dr, dc)), every
+            # first-attempt cell at the *original* end of the run will look
+            # "dropped" by simple position comparison — re-adding them creates
+            # phantom duplicates (e.g., first sees 'COB PEEL', retry sees 'COB
+            # PEE' shifted left, merge produces 'COBB PEELL' which the engine
+            # plays against). Detect the shift first and skip the merge in
+            # that case; the retry already represents the same tiles.
+            shift = _detect_uniform_shift(first_attempt_cells, data["board"]["cells"])
+            if shift is not None and shift != (0, 0):
                 logger.info(
-                    "Merged {} cell(s) from first attempt that retry dropped: {}",
-                    len(dropped),
-                    [(c["letter"], c["row"], c["col"]) for c in dropped],
+                    "Retry is a uniform ({:+d}, {:+d}) shift of first attempt "
+                    "— skipping merge to avoid duplicate-tile phantoms.",
+                    shift[0], shift[1],
                 )
+            else:
+                retry_positions = {(c["row"], c["col"]) for c in data["board"]["cells"]}
+                dropped = [c for c in first_attempt_cells if (c["row"], c["col"]) not in retry_positions]
+                if dropped:
+                    for cell in dropped:
+                        data["board"]["cells"].append(cell)
+                    logger.info(
+                        "Merged {} cell(s) from first attempt that retry dropped: {}",
+                        len(dropped),
+                        [(c["letter"], c["row"], c["col"]) for c in dropped],
+                    )
 
             # Hallucination guard: if the first attempt saw an empty rack but
             # the retry returned tiles drawn entirely from the board's letter
@@ -327,6 +488,29 @@ async def extract_board_state(
                     VALIDATION_FAILED,
                     f"Validation failed after retry: {'; '.join(errors)}",
                 )
+
+    # ------------------------------------------------------------------
+    # Step 4.5: Anchor cells against known-correct placements
+    # ------------------------------------------------------------------
+    # `known_tiles` is the bot's authoritative record of past accepted plays —
+    # we know the EXACT (row, col, letter) of every tile we've placed and had
+    # accepted by Letter League. Vision frequently drifts (off by 1-3 cells)
+    # on dense boards, which makes the engine generate plays that are valid
+    # in vision-space but invalid in reality-space (e.g., engine plays a
+    # cross-word using a tile vision claims is at (8,14) but is actually at
+    # (9,16); LL rejects).
+    #
+    # Two-pass correction:
+    #   1. Diff vision's read against `known_tiles` to detect a global shift.
+    #      Apply the inverse shift to ALL vision cells (so opponent tiles
+    #      also get corrected — they drift the same amount as ours).
+    #   2. Authoritatively overwrite every known cell: replace any vision
+    #      cell at a known position, drop vision cells that conflict with
+    #      a known tile's position, and inject the known tile if vision
+    #      missed it entirely. This guarantees the engine sees our tiles
+    #      where they actually are, regardless of any residual vision error.
+    if known_tiles:
+        _anchor_to_known_tiles(data, known_tiles)
 
     # ------------------------------------------------------------------
     # Step 5: Populate Board

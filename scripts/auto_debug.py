@@ -38,6 +38,7 @@ import hashlib
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -49,6 +50,8 @@ LOG_DIR = PROJECT_ROOT / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 AUTOPLAY_LOG = LOG_DIR / "autoplay.log"
 ORCHESTRATOR_LOG = LOG_DIR / "auto_debug.log"
+JOURNAL_PATH = LOG_DIR / "auto_debug_journal.md"
+AUTOPLAY_STDERR_TMP = LOG_DIR / "_autoplay_stderr.tmp"
 
 DEBUG_DIRS = [
     PROJECT_ROOT / "debug" / "tile_placer",
@@ -79,7 +82,9 @@ class RunResult:
     stderr_tail: str
     error_lines: list[str]
     error_signature: str  # hash of the canonicalised top error — used for loop-guard
-    clean_turns: int  # turns observed in the FULL run log (not just error window)
+    clean_turns: int  # all turn lines (placed + skipped) — kept for the journal
+    placed_turns: int  # turns that actually committed a word
+    skipped_turns: int  # turns that ended in swap/skip (success gate must NOT count these)
     reached_terminal_marker: bool  # saw "Reached max_turns" / "Game over" / "Stop requested"
 
 
@@ -89,6 +94,96 @@ def _log(msg: str) -> None:
     print(line, flush=True)
     with ORCHESTRATOR_LOG.open("a", encoding="utf-8") as f:
         f.write(line + "\n")
+
+
+def _kill_process_tree(pid: int) -> None:
+    """Best-effort kill of pid and all descendants.
+
+    On Windows, subprocess.run(timeout=...) only signals the immediate child,
+    so a wedged Playwright session (chromium + node helper) keeps the python
+    parent's stdio pipes open and the timeout never returns. taskkill /T walks
+    the whole tree by PID. On POSIX we kill the process group.
+    """
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(pid)],
+                capture_output=True,
+                timeout=15,
+            )
+        except (subprocess.SubprocessError, FileNotFoundError, OSError):
+            pass
+    else:
+        try:
+            pgid = os.getpgid(pid)
+        except (ProcessLookupError, PermissionError):
+            return
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                os.killpg(pgid, sig)
+            except (ProcessLookupError, PermissionError, OSError):
+                return
+            time.sleep(1.5)
+
+
+def _run_with_tree_kill(
+    cmd: list[str],
+    cwd: str,
+    env: dict[str, str],
+    timeout_s: int,
+    stderr_file: Path,
+) -> tuple[int, str, bool]:
+    """Spawn cmd in its own process group; on timeout, kill the whole tree.
+
+    stderr is redirected to ``stderr_file`` instead of a PIPE — long runs (loguru
+    streams INFO to stderr per turn) would otherwise fill the 64KB pipe buffer
+    and deadlock the child once the parent stops draining. Returns
+    (exit_code, stderr_text, hit_timeout).
+    """
+    if os.name == "nt":
+        popen_kwargs: dict[str, object] = {
+            "creationflags": subprocess.CREATE_NEW_PROCESS_GROUP,
+        }
+    else:
+        popen_kwargs = {"start_new_session": True}
+
+    stderr_file.parent.mkdir(parents=True, exist_ok=True)
+    if stderr_file.exists():
+        stderr_file.unlink()
+
+    with stderr_file.open("w", encoding="utf-8", errors="replace") as ferr:
+        proc = subprocess.Popen(  # noqa: S603 — args are constructed locally
+            cmd,
+            cwd=cwd,
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=ferr,
+            **popen_kwargs,  # type: ignore[arg-type]
+        )
+        hit_timeout = False
+        try:
+            proc.wait(timeout=timeout_s)
+        except subprocess.TimeoutExpired:
+            hit_timeout = True
+            _log(f"timeout — killing process tree pid={proc.pid}")
+            _kill_process_tree(proc.pid)
+            try:
+                proc.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                _log(f"WARNING: process tree kill did not fully drain pid={proc.pid}")
+
+    try:
+        stderr_text = stderr_file.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        stderr_text = ""
+
+    if hit_timeout:
+        stderr_text += "\n[auto_debug] subprocess timeout — process tree killed"
+        exit_code = -9
+    else:
+        exit_code = proc.returncode if proc.returncode is not None else -9
+
+    return exit_code, stderr_text, hit_timeout
 
 
 def _tail_lines(path: Path, n: int) -> list[str]:
@@ -136,29 +231,41 @@ def _extract_error_lines(log_lines: list[str]) -> list[str]:
 
 
 # Markers emitted by scripts/autoplay_headless.py — see _run() in that file.
-_TURN_PLAYED_RE = re.compile(r"\| __main__:_run:\d+ \| Turn \d+: ")
+# Distinguish "actually placed a word" from "swap/skip" so the success gate
+# can't be fooled by a run that exits cleanly while the bot is mostly skipping.
+_TURN_LINE_RE = re.compile(r"\| __main__:_run:\d+ \| Turn \d+: ")
+_TURN_PLACED_RE = re.compile(r"\| __main__:_run:\d+ \| Turn \d+: played ")
+_TURN_SKIPPED_RE = re.compile(r"\| __main__:_run:\d+ \| Turn \d+: no move accepted")
 _TERMINAL_RE = re.compile(
     r"Reached max_turns=|Game over after |Stop requested — exiting|Idle timeout — exiting"
 )
 
 
-def _count_clean_turns(log_lines: list[str]) -> tuple[int, bool]:
+def _count_clean_turns(log_lines: list[str]) -> tuple[int, int, int, bool]:
     """Scan the *full* per-run log slice for turn-completion markers.
 
-    Returns (turn_count, saw_terminal_marker). A clean exit-0 run that played
-    its full quota emits one "Turn N: ..." line per turn plus a terminal
-    marker — the orchestrator's success heuristic must read these from the
-    whole run, not the narrow error-region tail (which can be entirely
-    consumed by a single slow turn's placement logging).
+    Returns (total_turns, placed_turns, skipped_turns, saw_terminal_marker).
+    The success gate must compare against placed_turns, not total_turns —
+    a bot that takes its turn but always swap/skips would otherwise be
+    declared healthy. The user's bar is "place a word every turn".
     """
-    turn_count = 0
+    total = 0
+    placed = 0
+    skipped = 0
     saw_terminal = False
     for ln in log_lines:
-        if _TURN_PLAYED_RE.search(ln):
-            turn_count += 1
+        if _TURN_PLACED_RE.search(ln):
+            placed += 1
+            total += 1
+        elif _TURN_SKIPPED_RE.search(ln):
+            skipped += 1
+            total += 1
+        elif _TURN_LINE_RE.search(ln):
+            # Forward-compat: any new "Turn N:" variant we don't recognise.
+            total += 1
         if _TERMINAL_RE.search(ln):
             saw_terminal = True
-    return turn_count, saw_terminal
+    return total, placed, skipped, saw_terminal
 
 
 def _run_autoplay(
@@ -175,28 +282,18 @@ def _run_autoplay(
     ]
     _log(f"launching: {' '.join(cmd)}  (timeout={run_timeout_s}s)")
 
-    # Use a large ring buffer for stderr so we don't OOM on pathological runs
     env = os.environ.copy()
     env.setdefault("PYTHONPATH", str(PROJECT_ROOT))
     env.setdefault("PYTHONIOENCODING", "utf-8")
 
     start = time.monotonic()
-    try:
-        proc = subprocess.run(
-            cmd,
-            cwd=str(PROJECT_ROOT),
-            env=env,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=run_timeout_s,
-        )
-        exit_code = proc.returncode
-        stderr = proc.stderr or ""
-    except subprocess.TimeoutExpired as exc:
-        exit_code = -9
-        stderr = (exc.stderr or "") + "\n[auto_debug] subprocess timeout — killed"
+    exit_code, stderr, _hit_timeout = _run_with_tree_kill(
+        cmd,
+        cwd=str(PROJECT_ROOT),
+        env=env,
+        timeout_s=run_timeout_s,
+        stderr_file=AUTOPLAY_STDERR_TMP,
+    )
     duration = time.monotonic() - start
 
     stderr_lines = stderr.splitlines()
@@ -217,7 +314,7 @@ def _run_autoplay(
         run_log = full_log
 
     error_lines = _extract_error_lines(run_log)
-    clean_turns, reached_terminal = _count_clean_turns(run_log)
+    total_turns, placed, skipped, reached_terminal = _count_clean_turns(run_log)
     # Hashing stderr_tail + error_lines gives us a fingerprint resilient to
     # whichever sink caught the failure.
     signature = _canonicalise_error(error_lines + stderr_lines[-20:])
@@ -228,7 +325,9 @@ def _run_autoplay(
         stderr_tail=stderr_tail,
         error_lines=error_lines,
         error_signature=signature,
-        clean_turns=clean_turns,
+        clean_turns=total_turns,
+        placed_turns=placed,
+        skipped_turns=skipped,
         reached_terminal_marker=reached_terminal,
     )
 
@@ -261,6 +360,15 @@ def _write_context_bundle(
         f"- exit_code: `{result.exit_code}`",
         f"- duration: {result.duration_s:.1f}s",
         f"- error_signature: `{result.error_signature}`",
+        f"- words placed: {result.placed_turns}",
+        f"- turns skipped (swap/skip — these are FAILURES for the user goal): "
+        f"{result.skipped_turns}",
+        f"- terminal marker reached: {result.reached_terminal_marker}",
+        "",
+        "**User goal: the bot must place a word every turn.** A turn that ends in",
+        "swap/skip means the placement pipeline failed (vision drift, retries",
+        "exhausted, etc.) and the engine fell back to swap. The fix needs to make",
+        "more turns end with a placed word, not just keep the run alive longer.",
         "",
         "## Recent debug artifacts",
         *([f"- `{p.relative_to(PROJECT_ROOT).as_posix()}`" for p in newest_unique]
@@ -304,6 +412,231 @@ def _git(*args: str) -> str:
         return ""
 
 
+def _dirty_py_files() -> set[str]:
+    """Return repo-relative paths of modified or added .py files (uncommitted)."""
+    out = _git("status", "--porcelain")
+    files: set[str] = set()
+    for line in out.splitlines():
+        if len(line) < 4:
+            continue
+        # Porcelain format: XY <path>  (rename uses ' -> ', deletions start with D)
+        path = line[3:].strip()
+        if " -> " in path:
+            path = path.split(" -> ", 1)[1].strip()
+        path = path.strip('"')
+        if line[0] == "D" or line[1] == "D":
+            continue
+        if path.endswith(".py"):
+            files.add(path.replace("\\", "/"))
+    return files
+
+
+def _changed_py_since(initial: set[str]) -> list[str]:
+    """Files claude touched this session: dirty now but not dirty at startup."""
+    return sorted(_dirty_py_files() - initial)
+
+
+def _module_for(path: str) -> str | None:
+    """Convert e.g. 'src/browser/tile_placer.py' -> 'src.browser.tile_placer'.
+
+    Returns None for paths outside the importable tree (tests/, debug/, etc.)
+    or for ``__init__.py`` files (importing those re-runs package init —
+    fine for compile, brittle for import-smoke).
+    """
+    if not (path.startswith("src/") or path.startswith("scripts/")):
+        return None
+    if path.endswith("/__init__.py"):
+        return None
+    if not path.endswith(".py"):
+        return None
+    return path[:-3].replace("/", ".")
+
+
+def _matching_test_files(changed: list[str]) -> list[str]:
+    """For each src/<area>/<name>.py find tests/test_<name>.py or tests/<area>/test_<name>.py."""
+    found: list[str] = []
+    seen: set[str] = set()
+    for f in changed:
+        if not f.startswith("src/"):
+            continue
+        stem = Path(f).stem
+        rel_parent = Path(f).parent
+        try:
+            sub = rel_parent.relative_to("src")
+        except ValueError:
+            sub = Path()
+        candidates = [
+            PROJECT_ROOT / "tests" / f"test_{stem}.py",
+            PROJECT_ROOT / "tests" / sub / f"test_{stem}.py",
+        ]
+        for c in candidates:
+            rel = c.relative_to(PROJECT_ROOT).as_posix()
+            if c.exists() and rel not in seen:
+                found.append(rel)
+                seen.add(rel)
+    return found
+
+
+def _smoke_test_changed(changed: list[str]) -> tuple[bool, list[str]]:
+    """Compile + import + targeted pytest gate on Claude's edits.
+
+    Returns (ok, failure_summaries). ok=True when every step passed.
+    Each failure summary is a short label + truncated stderr.
+    """
+    if not changed:
+        return True, ["smoke: no .py files changed — skipped"]
+
+    failures: list[str] = []
+    env = os.environ.copy()
+    env.setdefault("PYTHONPATH", str(PROJECT_ROOT))
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+
+    # 1. py_compile: parser + bytecode-gen, catches syntax errors fast.
+    for f in changed:
+        proc = subprocess.run(
+            [sys.executable, "-m", "py_compile", f],
+            cwd=str(PROJECT_ROOT),
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+        if proc.returncode != 0:
+            failures.append(f"py_compile {f}:\n{(proc.stderr or proc.stdout).strip()[-800:]}")
+
+    if failures:
+        return False, failures
+
+    # 2. import: catches NameError/missing import/circular import that compile misses.
+    for f in changed:
+        mod = _module_for(f)
+        if mod is None:
+            continue
+        proc = subprocess.run(
+            [sys.executable, "-c", f"import {mod}"],
+            cwd=str(PROJECT_ROOT),
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+        if proc.returncode != 0:
+            failures.append(f"import {mod}:\n{(proc.stderr or proc.stdout).strip()[-800:]}")
+
+    if failures:
+        return False, failures
+
+    # 3. matching tests, if any. -x stops on first failure to keep the loop tight.
+    test_files = _matching_test_files(changed)
+    if test_files:
+        proc = subprocess.run(
+            [sys.executable, "-m", "pytest", *test_files, "-x", "-q"],
+            cwd=str(PROJECT_ROOT),
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=240,
+        )
+        if proc.returncode != 0:
+            tail = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()[-1500:]
+            failures.append(f"pytest {' '.join(test_files)} failed:\n{tail}")
+
+    return len(failures) == 0, failures or ["smoke: PASS"]
+
+
+def _append_smoke_section_to_bundle(bundle: Path, failures: list[str], attempt: int) -> None:
+    """Append a smoke-failure section to the iteration bundle so the retry sees it."""
+    parts = [
+        "",
+        f"## Post-edit smoke gate FAILED (attempt {attempt})",
+        "Your previous edit broke the smoke checks below. Read the failure",
+        "output, fix the actual issue (don't paper over it by deleting the",
+        "import or skipping the test), and end your turn.",
+        "",
+    ]
+    for fail in failures:
+        parts.append("```")
+        parts.append(fail)
+        parts.append("```")
+        parts.append("")
+    with bundle.open("a", encoding="utf-8") as f:
+        f.write("\n".join(parts))
+
+
+_HYPOTHESIS_RE = re.compile(
+    r"\*?\*?root cause[^*\n:]*\*?\*?:?\s*(.+?)(?:\n\s*\n|\*\*Files|\*\*Why|\Z)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _extract_hypothesis(response_text: str) -> str:
+    """Pull the 'root cause' sentence from a Claude response for the journal."""
+    if not response_text.strip():
+        return "(empty response — claude likely timed out)"
+    m = _HYPOTHESIS_RE.search(response_text)
+    if m:
+        text = m.group(1).strip().lstrip("*: ").strip()
+        return re.sub(r"\s+", " ", text)[:400]
+    # Fallback: first non-empty paragraph
+    paragraphs = [p.strip() for p in response_text.split("\n\n") if p.strip()]
+    if not paragraphs:
+        return "(no extractable hypothesis)"
+    return re.sub(r"\s+", " ", paragraphs[0].lstrip("*: ").strip())[:400]
+
+
+def _journal_excerpt(max_entries: int = 5) -> str:
+    """Last N entries of the cross-iteration journal, or a placeholder."""
+    if not JOURNAL_PATH.exists():
+        return "_(none — this is iteration 1, or the journal was reset)_"
+    try:
+        text = JOURNAL_PATH.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return "_(journal unreadable)_"
+    # Entries start with "## Iter " — split, keep the last N.
+    chunks = re.split(r"(?m)^(?=## Iter )", text)
+    chunks = [c.strip() for c in chunks if c.strip().startswith("## Iter ")]
+    if not chunks:
+        return "_(journal empty)_"
+    return "\n\n".join(chunks[-max_entries:])
+
+
+def _journal_append(
+    iteration: int,
+    result: "RunResult",
+    changed_files: list[str],
+    hypothesis: str,
+    smoke_status: str,
+) -> None:
+    """Append a structured per-iteration entry the next iteration's prompt will read."""
+    JOURNAL_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if not JOURNAL_PATH.exists():
+        JOURNAL_PATH.write_text(
+            "# Auto-debug journal\n\n"
+            "Each entry summarises one fix attempt. Newer iterations should\n"
+            "read this so they don't repeat or undo previous work.\n",
+            encoding="utf-8",
+        )
+    files_line = ", ".join(changed_files) if changed_files else "(none)"
+    parts = [
+        "",
+        f"## Iter {iteration} — sig {result.error_signature}",
+        f"- exit: `{result.exit_code}`  duration: {result.duration_s:.0f}s  "
+        f"placed: {result.placed_turns}  skipped: {result.skipped_turns}  "
+        f"terminal_marker: {result.reached_terminal_marker}",
+        f"- changed: {files_line}",
+        f"- smoke: {smoke_status}",
+        f"- hypothesis: {hypothesis}",
+    ]
+    with JOURNAL_PATH.open("a", encoding="utf-8") as f:
+        f.write("\n".join(parts) + "\n")
+
+
 def _find_claude_cli() -> str | None:
     exe = shutil.which("claude") or shutil.which("claude.exe")
     return exe
@@ -328,6 +661,14 @@ NOT ask the user questions and do NOT create git commits.
   smell), say so explicitly in your final message and make no edits.
 - After editing, run the relevant tests if a quick subset exists
   (`py -m pytest tests/<file> -x -q`). Skip running the full suite.
+
+## Previous attempts (read before editing)
+The orchestrator records every prior fix attempt below. Do NOT re-apply a
+fix that's already in place — read what's been tried, figure out what's
+*new* about the current failure, and target that. If a previous hypothesis
+turned out wrong, consider reverting it before patching elsewhere.
+
+{journal_excerpt}
 
 ## Context bundle
 Read this file first — it has the error region, debug artifacts, git state:
@@ -359,12 +700,14 @@ def _invoke_claude(
     signature: str,
     timeout_s: int,
     dry_run: bool,
+    journal_excerpt: str = "",
 ) -> tuple[bool, str]:
     prompt = PROMPT_TEMPLATE.format(
         bundle_path=bundle_path.as_posix(),
         iteration=iteration,
         max_iterations=max_iterations,
         signature=signature,
+        journal_excerpt=journal_excerpt or "_(no prior attempts recorded)_",
     )
     if dry_run:
         _log("--dry-run: would invoke claude with the following prompt:")
@@ -410,6 +753,12 @@ def main() -> int:
                    help="Per-run hard timeout in seconds (default 30 min)")
     p.add_argument("--claude-timeout", type=int, default=900,
                    help="Per-fix Claude invocation timeout in seconds")
+    p.add_argument("--smoke-claude-timeout", type=int, default=600,
+                   help="Claude invocation timeout for smoke-gate retries (focused task)")
+    p.add_argument("--no-smoke-gate", action="store_true",
+                   help="Disable post-edit compile/import/pytest gate (not recommended)")
+    p.add_argument("--reset-journal", action="store_true",
+                   help="Wipe logs/auto_debug_journal.md before starting (default: keep history)")
     p.add_argument("--repeat-limit", type=int, default=3,
                    help="Abort if the same error signature repeats this many times")
     p.add_argument("--mode", choices=("wild", "classic"), default="wild")
@@ -430,6 +779,16 @@ def main() -> int:
     ORCHESTRATOR_LOG.write_text(f"auto_debug run started {time.strftime('%Y-%m-%d %H:%M:%S')}\n",
                                 encoding="utf-8")
 
+    if args.reset_journal and JOURNAL_PATH.exists():
+        JOURNAL_PATH.unlink()
+        _log("journal reset")
+
+    # Snapshot pre-existing dirty .py files so the smoke gate only runs on
+    # files claude actually touches this session (not the user's stash).
+    initial_dirty = _dirty_py_files()
+    if initial_dirty:
+        _log(f"pre-existing dirty .py files (excluded from smoke): {sorted(initial_dirty)}")
+
     last_signature: str | None = None
     repeat_count = 0
 
@@ -446,30 +805,43 @@ def main() -> int:
         )
 
         _log(f"run finished: exit={result.exit_code}  "
-             f"duration={result.duration_s:.1f}s  sig={result.error_signature}")
+             f"duration={result.duration_s:.1f}s  sig={result.error_signature}  "
+             f"placed={result.placed_turns}  skipped={result.skipped_turns}  "
+             f"terminal={result.reached_terminal_marker}")
 
         if result.exit_code == 0:
-            clean = result.clean_turns
-            # A run that hit its --max-turns quota (or saw "Game over") is a
-            # full success regardless of how many turn-lines fall inside the
-            # narrow error-region tail. Tile placement logging can easily fill
-            # 30 lines per turn, so the previous heuristic mis-classified
-            # complete runs as partial.
+            placed = result.placed_turns
+            skipped = result.skipped_turns
+            # The user's bar is "place a word every turn without fault." A
+            # run that exits cleanly but mostly skipped is NOT a success —
+            # it's the exact failure mode we're trying to fix. The gate must
+            # compare placed_turns against min_clean_turns and never let
+            # skip-heavy runs slip through.
+            #
+            # Skip ratio guard: even hitting min_clean_turns in placements
+            # doesn't count if more than 1/3 of total turns were skipped —
+            # that signals the bot still has a placement reliability bug.
+            total = placed + skipped
+            skip_ratio = (skipped / total) if total else 0.0
             quota_reached = (
-                args.turns_per_run > 0 and clean >= args.turns_per_run
+                args.turns_per_run > 0 and placed >= args.turns_per_run
             )
-            if (
-                result.reached_terminal_marker
-                or quota_reached
-                or clean >= args.min_clean_turns
-            ):
+            placement_healthy = (
+                placed >= args.min_clean_turns and skip_ratio <= 0.33
+            )
+            if quota_reached or placement_healthy:
                 _log(
-                    f"SUCCESS — clean exit, {clean} turns played"
+                    f"SUCCESS — clean exit, {placed} placed / {skipped} skipped"
                     f"{' (terminal marker seen)' if result.reached_terminal_marker else ''}"
                     f". Stopping."
                 )
                 return 0
-            _log(f"Clean exit but only {clean} turns observed — treating as partial and continuing.")
+            reason: str
+            if placed < args.min_clean_turns:
+                reason = f"only {placed} word(s) placed (need >= {args.min_clean_turns})"
+            else:
+                reason = f"skip ratio {skip_ratio:.0%} too high (placed={placed}, skipped={skipped})"
+            _log(f"Clean exit but {reason} — treating as partial and continuing.")
 
         # Loop guard
         if last_signature == result.error_signature:
@@ -486,6 +858,8 @@ def main() -> int:
         bundle = _write_context_bundle(iteration, result, run_start_time)
         _log(f"wrote context bundle -> {bundle.as_posix()}")
 
+        journal_excerpt = _journal_excerpt(max_entries=5)
+
         ok, out = _invoke_claude(
             claude_exe or "claude",
             bundle,
@@ -494,6 +868,7 @@ def main() -> int:
             result.error_signature,
             timeout_s=args.claude_timeout,
             dry_run=args.dry_run,
+            journal_excerpt=journal_excerpt,
         )
         # Record the claude response for human review
         response_path = LOG_DIR / f"auto_debug_iter_{iteration:03d}_response.md"
@@ -502,6 +877,56 @@ def main() -> int:
 
         if not ok and not args.dry_run:
             _log("claude returned non-zero; continuing anyway to let the next run expose state")
+
+        # ── Post-edit smoke gate ──────────────────────────────────────────────
+        # Compile + import + matching pytest on whatever .py files claude touched
+        # this session. If the gate fails, re-invoke claude once with the failure
+        # appended to the bundle. We don't skip the next autoplay run on smoke
+        # failure: a broken import causes autoplay to exit in seconds (not 30 min)
+        # so the next iteration just sees the same error and tries again, with the
+        # journal entry below telling claude what already went wrong.
+        smoke_status = "skipped (--no-smoke-gate)"
+        if args.dry_run:
+            smoke_status = "skipped (--dry-run)"
+        elif args.no_smoke_gate:
+            pass
+        else:
+            changed = _changed_py_since(initial_dirty)
+            _log(f"smoke gate: {len(changed)} claude-touched .py file(s)")
+            smoke_ok, summary = _smoke_test_changed(changed)
+            if smoke_ok:
+                smoke_status = "PASS" if changed else "PASS (no changes)"
+                _log(f"smoke: {smoke_status}")
+            else:
+                _log(f"smoke: FAIL — {len(summary)} issue(s); re-invoking claude")
+                _append_smoke_section_to_bundle(bundle, summary, attempt=1)
+                _ok2, out2 = _invoke_claude(
+                    claude_exe or "claude",
+                    bundle,
+                    iteration,
+                    args.max_iterations,
+                    result.error_signature,
+                    timeout_s=args.smoke_claude_timeout,
+                    dry_run=False,
+                    journal_excerpt=journal_excerpt,
+                )
+                retry_path = LOG_DIR / f"auto_debug_iter_{iteration:03d}_smoke_retry.md"
+                retry_path.write_text(out2, encoding="utf-8")
+                _log(f"smoke retry claude response -> {retry_path.as_posix()}")
+                changed = _changed_py_since(initial_dirty)
+                smoke_ok2, summary2 = _smoke_test_changed(changed)
+                if smoke_ok2:
+                    smoke_status = "PASS (after 1 retry)"
+                    _log("smoke: PASS after retry")
+                else:
+                    head = summary2[0].splitlines()[0] if summary2 else "unknown"
+                    smoke_status = f"FAIL after retry: {head}"
+                    _log("smoke still failing — next iteration will see it via journal + autoplay log")
+
+        # ── Journal this iteration so the next prompt sees what happened ──────
+        hypothesis = _extract_hypothesis(out)
+        changed_now = _changed_py_since(initial_dirty)
+        _journal_append(iteration, result, changed_now, hypothesis, smoke_status)
 
         _log(f"sleeping {args.backoff}s before next run")
         time.sleep(args.backoff)

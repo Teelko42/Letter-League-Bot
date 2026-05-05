@@ -1,0 +1,7 @@
+Tests green, syntax clean.
+
+**Root cause hypothesis**: After the activity iframe died mid-game (`Locator.screenshot: hard timeout exceeded` while placing the 'W' of `TAW`), `_recover_iframe` re-navigated three times and each attempt failed identically — clicked "Letter League" in the shelf, the launcher_btn `wait_for(timeout=8000)` raised in only ~232 ms (well below its timeout, suggesting the SPA was mid-render and the locator's frame was transiently detached), the swallowed exception left no real launch click registered, and the iframe never appeared (page frames stuck at `[discord channel, about:blank]`). Worse, the per-attempt retries inside `navigate_to_activity` just called `page.goto(same_url)` again, which Discord's SPA doesn't fully reset, so the same race repeated.
+
+**Files changed**: `src/browser/navigator.py` only.
+
+**Why the next run should do better**: (1) a 2 s settle now sits between clicking the activity card and probing for the launcher, closing the detach-during-render race; (2) the launcher catch now logs the actual exception type/message, so if this still fails we'll see *why*; (3) while waiting up to 60 s for the iframe, the loop re-clicks any visible launcher button every 15 s so a missed/early click gets a second chance without burning a full retry attempt; (4) between top-level retry attempts in `navigate_to_activity`, we now do an explicit `page.reload()`, which forces Discord out of any half-launched SPA state that mere `goto(same_url)` left intact. No safety checks were disabled and no tests were touched.

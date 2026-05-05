@@ -1,0 +1,16 @@
+[auto_debug 12:01:19] using claude CLI at: C:\Users\Ninja\.local\bin\claude.EXE
+[auto_debug 12:01:19] pre-existing dirty .py files (excluded from smoke): ['scripts/auto_debug.py', 'src/browser/navigator.py']
+[auto_debug 12:01:19] === iteration 1/10 ===
+[auto_debug 12:01:19] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 10 --mode wild  (timeout=1800s)
+[auto_debug 12:31:19] timeout — killing process tree pid=33896
+[auto_debug 12:31:19] run finished: exit=-9  duration=1800.6s  sig=f4150e44c632
+[auto_debug 12:31:20] wrote context bundle -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_001.md
+[auto_debug 12:31:20] invoking claude (timeout=900s, acceptEdits)
+[auto_debug 12:40:29] ok — claude response -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_001_response.md
+[auto_debug 12:40:30] smoke gate: 1 claude-touched .py file(s)
+[auto_debug 12:40:36] smoke: PASS
+[auto_debug 12:40:37] sleeping 5s before next run
+[auto_debug 12:40:42] === iteration 2/10 ===
+[auto_debug 12:40:42] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 10 --mode wild  (timeout=1800s)
+[auto_debug 13:07:31] run finished: exit=0  duration=1609.5s  sig=be3708fdc943
+[auto_debug 13:07:31] SUCCESS — clean exit, 8 turns played (terminal marker seen). Stopping.

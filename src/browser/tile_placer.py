@@ -54,15 +54,31 @@ CONFIRM_X_FRAC = 0.499527  # PLAY button center X — X frac is ~0.5 at every ca
 # BELOW the button bar, so PLAY/RECALL clicks hit empty space — every word
 # was silently "rejected" because the click never reached the button.
 
-MAX_WORD_RETRIES = 5        # max different words to try before tile swap
+MAX_WORD_RETRIES = 2        # max different words to try before tile swap
+# Lowered 5 → 3 → 2.  Multiple consecutive runs show 100% of accepted plays
+# came from attempt 1 of each vision pass; attempts 2+ from the *same* vision
+# share the same root-cause failure (vision position drift, or a candidate
+# the game's dictionary just won't accept) so they almost always reject too,
+# burning ~30 s each.  The autoplay loop already re-vision-retries with a
+# fresh candidate list, so the effective per-turn cap is still 4 attempts —
+# enough headroom for the rare 2-attempts-needed turn while reclaiming
+# wallclock for additional turns within the 30-min orchestrator timeout.
 
 # Acceptance-detection polling: how many times (and how often) to re-check the
 # turn state after clicking confirm.  Total wait ≈ polls × (interval + ~0.4 s
-# screenshot). Rejected words leave the banner visible for the full window, so
-# keeping this tight saves ~3 s per rejected attempt without risking missed
-# acceptance (the banner disappears within one render frame of success).
-_ACCEPT_POLLS = 3           # number of post-confirm screenshots
-_ACCEPT_POLL_INTERVAL_S = 0.6  # seconds between each poll
+# screenshot).
+#
+# Why this is generous: Letter League's server-side validation + commit
+# animation has high variance — observed acceptances range from 1.4 s (fast)
+# to >4 s (slow) on the same network. The Massive-patch-#2 tightening to
+# 3×0.6 s ≈ 1.8 s caused valid words (DISH, RAGE, GRADE, BLUEY, ARGUED, etc.)
+# to be misclassified as rejected: the orange "your turn" banner was still
+# visible at the final poll, the bot recalled the tiles mid-validation, and
+# blacklisted the word. Restoring a wider window (6×1.0 s ≈ 6 s plus capture
+# overhead) is the right tradeoff: an extra ~4 s on the rare actual rejection
+# is far cheaper than turning every slow acceptance into a phantom rejection.
+_ACCEPT_POLLS = 6           # number of post-confirm screenshots
+_ACCEPT_POLL_INTERVAL_S = 1.0  # seconds between each poll
 
 # Debug screenshot directory — captures pre-PLAY and post-RECALL states.
 # Saved to debug/tile_placer/ alongside other debug images.
@@ -72,7 +88,7 @@ SWAP_X_FRAC = 0.409650     # SWAP button X — LEFT of PLAY (x=433 at 1057x768).
 # RECALL/SWAP share the PLAY row; Y is computed by CoordMapper._button_bar_y().
 
 # "Select a letter" blank-tile dialog — probe points for open-state detection.
-# Calibrated from debug/tile_placer/post_recall_attempt5.png (1545x768 canvas).
+# Calibrated from data/calibration/post_recall_attempt5.png (1545x768 canvas).
 # The X close button's inner cross is pure white (255,255,255) when visible;
 # when absent, the same screen position shows a board cell color (peach, 2W
 # green, 3W pink, etc.) — never near-white. The dialog title "Select a letter"

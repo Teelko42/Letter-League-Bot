@@ -1,0 +1,9 @@
+[auto_debug 13:23:47] using claude CLI at: C:\Users\Ninja\.local\bin\claude.EXE
+[auto_debug 13:23:47] journal reset
+[auto_debug 13:23:47] pre-existing dirty .py files (excluded from smoke): ['scripts/auto_debug.py', 'src/browser/navigator.py', 'src/browser/tile_placer.py']
+[auto_debug 13:23:47] === iteration 1/10 ===
+[auto_debug 13:23:47] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 10 --mode wild  (timeout=1800s)
+[auto_debug 13:53:47] timeout — killing process tree pid=34780
+[auto_debug 13:53:48] run finished: exit=-9  duration=1800.7s  sig=c13f867530ad  placed=3  skipped=6  terminal=False
+[auto_debug 13:53:48] wrote context bundle -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_001.md
+[auto_debug 13:53:48] invoking claude (timeout=900s, acceptEdits)

@@ -75,7 +75,7 @@ GAME_READY_TIMEOUT_S = 60.0
 GAME_READY_POLL_S = 2.0
 
 # START GAME button fractional position within the canvas/iframe.
-# Re-calibrated 2026-04-21 from debug/menu_screen.png — contour-detected
+# Re-calibrated 2026-04-21 from data/calibration/menu_screen.png — contour-detected
 # button bbox spans (0.764-0.981, 0.900-0.981); center at (0.872, 0.940).
 # The previous values (0.935, 0.957) landed near the rounded right edge of
 # the pill and sometimes missed when iframe dimensions differed from the

@@ -4,3 +4,7 @@ __pycache__/
 .pytest_cache/
 browser_data/
 debug_*.png
+
+# Auto-generated debug screenshots from autoplay/calibration runs.
+# Calibration source images live in data/calibration/, not here.
+debug/

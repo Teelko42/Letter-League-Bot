@@ -73,7 +73,7 @@ python -m pytest tests/ -v
 python scripts/calibrate_turn.py
 
 # Tile placement coordinate calibration
-& "C:\Users\Ninja\AppData\Local\Programs\Python\Python310\python.exe" scripts/calibrate_placement.py debug/calibration.png
+& "C:\Users\Ninja\AppData\Local\Programs\Python\Python310\python.exe" scripts/calibrate_placement.py data/calibration/calibration.png
 
 ------------------------------------------------------------
   BROWSER SESSION TESTING

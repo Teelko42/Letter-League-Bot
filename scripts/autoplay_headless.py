@@ -54,6 +54,82 @@ def _configure_logging() -> None:
                format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level:<7} | {name}:{function}:{line} | {message}")
 
 
+def _move_is_safe(move: "Move", known_tiles: dict[tuple[int, int], str]) -> bool:
+    """Return True iff every existing-board tile this move uses is authoritative.
+
+    A move's ``tiles_used`` mixes rack-placed tiles (from_rack=True) with the
+    existing board tiles the word builds on (from_rack=False). When an
+    existing-board tile_use sits at a position not in ``known_tiles`` it came
+    from vision's view of an opponent tile we've never confirmed — and since
+    vision drift on dense boards can place a tile 1-3 cells off, the engine
+    is happily building a play through a phantom letter that isn't actually
+    where it thinks. Letter League rejects such plays at submission time.
+
+    Filtering preference (vs hard rejection): even risky moves are useful as
+    fallbacks if no safe move exists, so callers should *order* candidates
+    safe-first rather than dropping risky ones outright.
+    """
+    for t in move.tiles_used:
+        if not t.from_rack and (t.row, t.col) not in known_tiles:
+            return False
+    return True
+
+
+def _build_candidates(
+    moves: list,
+    known_tiles: dict[tuple[int, int], str],
+    difficulty_engine,
+    cap: int = 5,
+) -> list:
+    """Order moves into a place-move candidate list, preferring safe over risky.
+
+    Within each safety tier the order is: highest-quality pick (per
+    ``difficulty_engine.select_move``) first, then frequency-ordered fallbacks.
+
+    Why difficulty=50 (balanced score+frequency): Letter League's live word
+    list is materially smaller than a Scrabble GADDAG — it routinely rejects
+    valid English (CLIMBED, UPCLIMBED, PAVONINE, NEVOID, KNAP) while
+    accepting their common-word neighbours. Empirical: a pure-score primary
+    (difficulty=100) loses turns to dictionary rejections; a pure-freq
+    primary (difficulty=0) lands at 70% but scores poorly because it picks
+    BE/HO/AH over ITALICIZE/ZOUNDS. Difficulty 50 blends the two — common
+    words still get a strong boost, but among similarly-common candidates
+    the higher-scoring play wins, so big anchor extensions (ITALICIZE-class)
+    can rise back to the top when their frequency is decent. The fallback
+    is freq-sorted regardless, so even after the primary is rejected the
+    next attempt is still a common-word fallback.
+
+    The returned list never exceeds ``cap`` items; the placer tries them in
+    order up to MAX_WORD_RETRIES.
+    """
+    if not moves:
+        return []
+
+    safe = [m for m in moves if _move_is_safe(m, known_tiles)]
+    risky = [m for m in moves if not _move_is_safe(m, known_tiles)]
+
+    def _tier(pool: list) -> list:
+        if not pool:
+            return []
+        primary = difficulty_engine.select_move(pool, 50)
+        fallback = sorted(
+            (m for m in pool if m is not primary),
+            key=lambda m: difficulty_engine.freq.normalized(m.word),
+            reverse=True,
+        )
+        return [primary] + fallback
+
+    out: list = []
+    for tier in (_tier(safe), _tier(risky)):
+        for m in tier:
+            if len(out) >= cap:
+                break
+            out.append(m)
+        if len(out) >= cap:
+            break
+    return out
+
+
 def _is_iframe_dead_error(exc: BaseException) -> bool:
     """Return True if exc looks like the activity iframe is gone.
 
@@ -118,6 +194,15 @@ async def _run(max_turns: int, mode: str) -> int:
 
     session = BrowserSession()
     turn_count = 0
+    # Authoritative record of (row, col) -> letter for tiles the bot has
+    # successfully placed. Built from accepted Move.tiles_used after each
+    # turn LL confirms. Passed to extract_board_state so the vision pipeline
+    # can detect drift (vision sees our known tiles offset by some (dr, dc))
+    # and authoritatively pin our cells in place. Without this the engine
+    # can spend turns generating "valid" plays against a phantom board state
+    # that LL then rejects because the tiles aren't actually where vision
+    # thought they were.
+    known_tiles: dict[tuple[int, int], str] = {}
     try:
         page = await session.start()
         logger.info("Browser up — navigating to {}", channel_url)
@@ -180,7 +265,10 @@ async def _run(max_turns: int, mode: str) -> int:
             for attempt in range(2):
                 try:
                     img_bytes = await capture_canvas(page)
-                    board, rack = await extract_board_state(img_bytes, mode=mode, gaddag=gaddag)
+                    board, rack = await extract_board_state(
+                        img_bytes, mode=mode, gaddag=gaddag,
+                        known_tiles=known_tiles,
+                    )
                     iframe_dead_during_vision = None
                     break
                 except Exception as exc:
@@ -204,16 +292,15 @@ async def _run(max_turns: int, mode: str) -> int:
 
             moves = await asyncio.to_thread(find_all_moves, board, rack, gaddag, mode)
             moves = rejected_words.filter_moves(moves)
-            if moves:
-                selected = await asyncio.to_thread(
-                    difficulty_engine.select_move, moves, 100,
-                )
-                candidates = [selected]
-                for m in moves:
-                    if m is not selected and len(candidates) < 5:
-                        candidates.append(m)
-            else:
-                candidates = []
+            # Order candidates safe-first: a move that hooks only through our
+            # known anchors (or is rack-only) won't be invalidated by vision
+            # drift on opponent tiles. Risky moves (depending on unverified
+            # opponent positions) are still in the list as fallbacks. Within
+            # each tier the existing freq-then-score logic still applies — see
+            # _build_candidates for details.
+            candidates = await asyncio.to_thread(
+                _build_candidates, moves, known_tiles, difficulty_engine,
+            )
 
             turn_count += 1
             try:
@@ -242,16 +329,15 @@ async def _run(max_turns: int, mode: str) -> int:
                 )
                 try:
                     img_bytes = await capture_canvas(page)
-                    board, rack = await extract_board_state(img_bytes, mode=mode, gaddag=gaddag)
+                    board, rack = await extract_board_state(
+                        img_bytes, mode=mode, gaddag=gaddag,
+                        known_tiles=known_tiles,
+                    )
                     moves = await asyncio.to_thread(find_all_moves, board, rack, gaddag, mode)
                     moves = rejected_words.filter_moves(moves)
-                    if moves:
-                        selected = await asyncio.to_thread(
-                            difficulty_engine.select_move, moves, 100,
-                        )
-                        candidates = [selected] + [m for m in moves if m is not selected][:4]
-                    else:
-                        candidates = []
+                    candidates = await asyncio.to_thread(
+                        _build_candidates, moves, known_tiles, difficulty_engine,
+                    )
                     accepted = await placer.place_move(candidates, rack, swap_on_fail=True)
                 except Exception as exc:
                     logger.warning("Re-vision retry failed: {}", exc)
@@ -266,6 +352,16 @@ async def _run(max_turns: int, mode: str) -> int:
             if accepted:
                 logger.info("Turn {}: played '{}' (score={})",
                             turn_count, accepted.word, accepted.score)
+                # Record every tile in the accepted play as ground truth —
+                # both the rack tiles we just placed and any board tiles the
+                # word built on. LL accepting the move proves vision's read
+                # of those positions agreed with reality, so they're safe to
+                # treat as anchors for subsequent turns.
+                for t in accepted.tiles_used:
+                    known_tiles[(t.row, t.col)] = t.letter
+                logger.debug(
+                    "Known-tile anchor set now {} tile(s)", len(known_tiles),
+                )
             else:
                 logger.info("Turn {}: no move accepted (swap/skip)", turn_count)
 

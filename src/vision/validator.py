@@ -29,6 +29,25 @@ def correct_positions(data: dict) -> None:
     if not cells:
         return
 
+    # Bail out when vision's multiplier signal is uniformly the same value
+    # across every reported tile (e.g. all "DW").  This pattern occurs when
+    # vision tags the freshly-placed-tile *highlight colour* as a multiplier
+    # rather than reading the square underneath — the signal is meaningless
+    # and any shift it picks is coincidental.  Letting it through caused
+    # wrong global shifts that turned valid plays into rejections (observed
+    # case: HAIL on the board → vision tagged all 4 cells DW → shift moved
+    # the anchor letter, engine planned through the wrong existing tile).
+    reported_mults = {c["multiplier"] for c in cells}
+    if len(cells) >= 2 and len(reported_mults) == 1 and "NONE" not in reported_mults:
+        logger.debug(
+            "Position auto-correction skipped: all {} cell(s) report "
+            "identical multiplier '{}' — likely highlight artefact, "
+            "not real layout signal",
+            len(cells),
+            next(iter(reported_mults)),
+        )
+        return
+
     def _mult_score(dr: int, dc: int) -> tuple[int, int]:
         """Return (matches, informative) for a global shift of *(dr, dc)*.
 
@@ -149,6 +168,19 @@ def correct_positions_center_star(data: dict) -> None:
     # Only apply for single runs (the first word on an otherwise empty board).
     runs = _find_tile_runs(cells)
     if len(runs) != 1:
+        return
+
+    # Same uniform-multiplier guard as correct_positions: if every cell reports
+    # the same non-NONE multiplier, the signal is highlight-noise rather than
+    # real layout, so any shift we score against it is coincidental.
+    reported_mults = {c["multiplier"] for c in cells}
+    if len(reported_mults) == 1 and "NONE" not in reported_mults:
+        logger.debug(
+            "Center star correction skipped: uniform multiplier '{}' across "
+            "all {} cells — no reliable signal to score shifts",
+            next(iter(reported_mults)),
+            len(cells),
+        )
         return
 
     best_dr, best_dc = 0, 0

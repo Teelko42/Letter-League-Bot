@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.vision.validator import correct_positions, correct_positions_gaddag, validate_extraction
+from src.vision.validator import correct_positions, correct_positions_center_star, correct_positions_gaddag, validate_extraction
 from src.vision.schema import OFFICIAL_MULTIPLIER_LAYOUT
 
 
@@ -227,6 +227,57 @@ def test_correct_positions_no_shift_when_already_correct():
     positions = {(c["row"], c["col"]) for c in data["board"]["cells"]}
     assert (0, 20) in positions
     assert (2, 18) in positions
+
+
+def test_correct_positions_skips_uniform_multiplier_signal():
+    """When every cell reports the same non-NONE multiplier, the signal is
+    a highlight-colour artefact (e.g. green outline on freshly-played tiles
+    being read as 'DW'), not a real layout match.  Auto-correction must not
+    apply a shift based on it.
+
+    Regression: real board had HAIL on (9,13)-(9,16) with the freshly-placed
+    green outline.  Vision returned NAIL at (9,12)-(9,15) all marked DW.
+    correct_positions then shifted (-3, +3), and correct_positions_center_star
+    composed (+3, -2) on top — net (0, +1) — placing a phantom 'N' on (9,13)
+    while the real cell holds 'H'.  The engine generated ANGIOMAS through
+    the phantom N, which Letter League rejected.
+    """
+    cells = [
+        {"row": 9, "col": 12, "letter": "N", "is_blank": False, "multiplier": "DW"},
+        {"row": 9, "col": 13, "letter": "A", "is_blank": False, "multiplier": "DW"},
+        {"row": 9, "col": 14, "letter": "I", "is_blank": False, "multiplier": "DW"},
+        {"row": 9, "col": 15, "letter": "L", "is_blank": False, "multiplier": "DW"},
+    ]
+    data = _make_data(cells, rack=["A"])
+
+    correct_positions(data)
+
+    positions = {(c["row"], c["col"]) for c in data["board"]["cells"]}
+    assert positions == {(9, 12), (9, 13), (9, 14), (9, 15)}, (
+        "Uniform-multiplier signal must not trigger a position shift"
+    )
+
+
+def test_correct_positions_center_star_skips_uniform_multiplier_signal():
+    """Center-star correction scores candidate shifts against multipliers, so
+    it must apply the same uniform-multiplier guard as correct_positions.
+    Otherwise, when correct_positions correctly bails out and no tile lands
+    on (9,13), the center-star pass would still pick a shift on bogus signal.
+    """
+    # Single run with no tile on (9,13), every cell tagged DW.
+    cells = [
+        {"row": 5, "col": 5, "letter": "C", "is_blank": False, "multiplier": "DW"},
+        {"row": 5, "col": 6, "letter": "A", "is_blank": False, "multiplier": "DW"},
+        {"row": 5, "col": 7, "letter": "T", "is_blank": False, "multiplier": "DW"},
+    ]
+    data = _make_data(cells, rack=["A"])
+
+    correct_positions_center_star(data)
+
+    positions = {(c["row"], c["col"]) for c in data["board"]["cells"]}
+    assert positions == {(5, 5), (5, 6), (5, 7)}, (
+        "Uniform-multiplier signal must not trigger a center-star shift"
+    )
 
 
 # ---------------------------------------------------------------------------

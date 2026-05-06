@@ -28,16 +28,26 @@ TurnState = Literal["my_turn", "not_my_turn", "game_over", "idle_timeout", "stop
 BANNER_HSV_LOWER = np.array([5, 120, 150])   # Calibrated 2026-03-26 — confirmed from observed H=[6-22]
 BANNER_HSV_UPPER = np.array([20, 255, 255])  # Calibrated 2026-03-26 — confirmed from observed H=[6-22]
 
-# Fractional vertical range of the banner ROI within the canvas (top 10%).
-# Top 10% captures the header/score bar where orange signal is concentrated.
-# At 15%, rows 10-15% are empty in the live UI, diluting the ratio below
-# the BANNER_CONFIDENCE threshold; top 10% gives 0.10 for my_turn and 0.04
-# for not_my_turn — clean separation at the 0.07 threshold.
-BANNER_ROI_FRAC = (0.0, 0.10)  # Updated 2026-04-14 — tightened from 0.15 to fix live-game miss
+# Fractional vertical range of the banner ROI within the canvas (top 13%).
+# Top 13% captures the YOUR TURN banner; widened slightly from the historical
+# top-10% to be robust against canvas aspect-ratio variation.
+BANNER_ROI_FRAC = (0.0, 0.13)
 
-# Minimum ratio of orange pixels in the ROI required to declare "my turn".
-# my_turn: ~9-10% orange | not_my_turn: ~3.7% (logo only) | threshold at 7%.
-BANNER_CONFIDENCE = 0.07  # Calibrated 2026-03-26
+# Fractional horizontal range of the banner ROI. The YOUR TURN banner sits in
+# the right half of the central turn-timer panel (observed at x≈0.56–0.66 in
+# data/calibration/calibration.png). Restricting to x≈0.45–0.72 excludes the
+# orange Letter League logo (top-left), the orange "PASS TURN" button (centre-
+# left of the panel), and the row of orange 3W multiplier squares at the
+# board's top edge — all of which pushed the full-strip orange ratio above
+# threshold during the *opponent's* turn in 2-player games, causing a false
+# my_turn classification (Updated 2026-05-05).
+BANNER_ROI_X_FRAC = (0.45, 0.72)
+
+# Minimum ratio of orange pixels in the (vertical × horizontal) ROI required
+# to declare "my turn". With the tightened ROI focused on the banner area,
+# my_turn produces ~25%+ orange and opponent's turn produces near 0% — wide
+# margin lets the threshold sit comfortably at 0.10.
+BANNER_CONFIDENCE = 0.10
 
 # Peach ratio in the centre region below which we suspect game-over.
 # Gameplay: ~57-60% peach | Game-over overlay: ~12% peach | threshold at 25%.
@@ -149,11 +159,16 @@ def _is_my_turn(img_bytes: bytes) -> bool:
     h, w = bgr.shape[:2]
     y_start = int(h * BANNER_ROI_FRAC[0])
     y_end = int(h * BANNER_ROI_FRAC[1])
-    roi = bgr[y_start:y_end, :]
+    x_start = int(w * BANNER_ROI_X_FRAC[0])
+    x_end = int(w * BANNER_ROI_X_FRAC[1])
+    roi = bgr[y_start:y_end, x_start:x_end]
+    if roi.size == 0:
+        return False
 
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv, BANNER_HSV_LOWER, BANNER_HSV_UPPER)
     orange_ratio = np.count_nonzero(mask) / mask.size
+    logger.debug("Banner orange ratio: {:.4f} (threshold {:.2f})", orange_ratio, BANNER_CONFIDENCE)
 
     return bool(orange_ratio >= BANNER_CONFIDENCE)
 

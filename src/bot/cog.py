@@ -25,6 +25,7 @@ from src.bot.formatter import (
     build_no_moves_embed,
     build_success_embed,
 )
+from src.engine import rejected_words
 from src.engine.moves import find_all_moves
 from src.vision import extract_board_state
 from src.vision.errors import VisNError
@@ -107,6 +108,14 @@ class AdvisorCog(commands.Cog):
                 len(moves),
                 time.monotonic() - engine_start,
             )
+
+            # Step 6b: Drop moves whose word is on the live-rejection blacklist.
+            # Letter League's dictionary is stricter than the bot's GADDAG
+            # (e.g. SOWPODS words like LOWP that the engine accepts but the
+            # game rejects). Autoplay learns these from real rejections; we
+            # apply the same filter here so /analyze recommendations don't
+            # surface words that won't play.
+            moves = rejected_words.filter_moves(moves)
 
             # Step 7: Handle no-moves case
             if not moves:

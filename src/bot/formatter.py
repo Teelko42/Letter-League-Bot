@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 import discord
 
 from src.vision.errors import (
+    API_OVERLOADED,
     EXTRACTION_FAILED,
     INVALID_SCREENSHOT,
     VALIDATION_FAILED,
@@ -189,6 +190,10 @@ def build_error_embed(error: VisNError) -> discord.Embed:
         EXTRACTION_FAILED: (
             "Vision API unavailable",
             "The analysis service is temporarily unavailable. Please try again in a moment.",
+        ),
+        API_OVERLOADED: (
+            "Anthropic API overloaded",
+            "Anthropic's vision API is temporarily overloaded. Please try again in ~30 seconds.",
         ),
         VALIDATION_FAILED: (
             "Board reading failed",

@@ -12,7 +12,18 @@ import numpy as np
 import cv2
 import pytest
 
-from src.browser.tile_placer import CoordMapper, PlacementError, TilePlacer
+from src.browser.tile_placer import (
+    CELL_H_FRAC,
+    CELL_W_FRAC,
+    CoordinateDriftError,
+    CoordMapper,
+    GRID_X0_FRAC,
+    GRID_Y0_FRAC,
+    PlacementError,
+    TilePlacer,
+    _cell_v_range,
+    _check_move_anchors,
+)
 from src.engine.models import Move, ScoreBreakdown, TileUse
 
 
@@ -74,6 +85,35 @@ def _make_different_png() -> bytes:
 
 def _make_black_png() -> bytes:
     img = np.zeros((50, 50, 3), dtype=np.uint8)
+    _, buf = cv2.imencode(".png", img)
+    return buf.tobytes()
+
+
+def _make_board_png(tile_cells: set[tuple[int, int]]) -> bytes:
+    """Build a synthetic 1545x768 board image with painted tiles at given cells.
+
+    Empty cells are filled with peach (uniform → V_range == 0).  Tile cells
+    are painted with a checkerboard of black and white pixels so V_range
+    reaches 255 — the classic occupied-cell signature.
+
+    Args:
+        tile_cells: Set of (row, col) coordinates that should read as occupied.
+    """
+    h, w = 768, 1545
+    img = np.full((h, w, 3), (210, 230, 250), dtype=np.uint8)  # peach BGR
+
+    for row, col in tile_cells:
+        cx = int((GRID_X0_FRAC + (col + 0.5) * CELL_W_FRAC) * w)
+        cy = int((GRID_Y0_FRAC + (row + 0.5) * CELL_H_FRAC) * h)
+        cw = int(CELL_W_FRAC * w)
+        ch = int(CELL_H_FRAC * h)
+        x0, x1 = cx - cw // 2, cx + cw // 2
+        y0, y1 = cy - ch // 2, cy + ch // 2
+        # Paint two horizontal stripes — black on top, white on bottom — so any
+        # sample that lands inside the cell sees V values from 0 to 255.
+        img[y0 : (y0 + y1) // 2, x0:x1] = (0, 0, 0)
+        img[(y0 + y1) // 2 : y1, x0:x1] = (255, 255, 255)
+
     _, buf = cv2.imencode(".png", img)
     return buf.tobytes()
 
@@ -184,6 +224,87 @@ class TestPlaceTiles:
                 await placer.place_tiles(move, ["A"])
 
     @pytest.mark.asyncio
+    async def test_place_tiles_raises_coordinate_drift_on_first_tile(self):
+        """First-tile failure with drift signature (high global, ~zero local)
+        on both attempts raises CoordinateDriftError, not plain PlacementError."""
+        placer, page = _make_placer()
+        tiles = [TileUse(row=0, col=0, letter="A", is_blank=False, from_rack=True)]
+        move = _make_move("A", "H", tiles)
+
+        async def fake_verify(*args, **kwargs):
+            placer._last_global_diff = 0.95
+            placer._last_local_diff = 0.0
+            return False
+
+        with (
+            patch.object(placer, "_get_canvas_bbox", new_callable=AsyncMock, return_value=BBOX),
+            patch.object(placer, "_verify_placement", side_effect=fake_verify),
+            patch("src.browser.tile_placer.capture_canvas", new_callable=AsyncMock, return_value=_make_black_png()),
+            patch("src.browser.tile_placer.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            with pytest.raises(CoordinateDriftError, match="do not match the live board"):
+                await placer.place_tiles(move, ["A"])
+
+    @pytest.mark.asyncio
+    async def test_place_tiles_no_drift_when_global_low(self):
+        """Verifier failure with low global diff is *not* drift — the click
+        was a no-op (e.g. dialog blocking it). Falls through to plain
+        PlacementError so the orchestrator continues with other candidates."""
+        placer, page = _make_placer()
+        tiles = [TileUse(row=0, col=0, letter="A", is_blank=False, from_rack=True)]
+        move = _make_move("A", "H", tiles)
+
+        async def fake_verify(*args, **kwargs):
+            placer._last_global_diff = 0.05  # below the 0.10 drift floor
+            placer._last_local_diff = 0.0
+            return False
+
+        with (
+            patch.object(placer, "_get_canvas_bbox", new_callable=AsyncMock, return_value=BBOX),
+            patch.object(placer, "_verify_placement", side_effect=fake_verify),
+            patch("src.browser.tile_placer.capture_canvas", new_callable=AsyncMock, return_value=_make_black_png()),
+            patch("src.browser.tile_placer.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            with pytest.raises(PlacementError, match="failed to place after retry") as exc_info:
+                await placer.place_tiles(move, ["A"])
+            assert not isinstance(exc_info.value, CoordinateDriftError)
+
+    @pytest.mark.asyncio
+    async def test_place_tiles_drift_only_fires_on_first_tile(self):
+        """Drift detection is gated to ordinal == 0. A later-tile failure with
+        the same diff signature still raises plain PlacementError because by
+        then we've already proven the coordinate frame is correct (the first
+        tile landed)."""
+        placer, page = _make_placer()
+        tiles = _h_tiles("AB", row=0, start_col=0)
+        move = _make_move("AB", "H", tiles)
+
+        call_count = 0
+
+        async def fake_verify(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            # First call (tile A, ordinal 0): pass.
+            # Subsequent calls (tile B, ordinal 1): fail with drift signature.
+            if call_count == 1:
+                placer._last_global_diff = 5.0
+                placer._last_local_diff = 30.0
+                return True
+            placer._last_global_diff = 0.95
+            placer._last_local_diff = 0.0
+            return False
+
+        with (
+            patch.object(placer, "_get_canvas_bbox", new_callable=AsyncMock, return_value=BBOX),
+            patch.object(placer, "_verify_placement", side_effect=fake_verify),
+            patch("src.browser.tile_placer.capture_canvas", new_callable=AsyncMock, return_value=_make_black_png()),
+            patch("src.browser.tile_placer.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            with pytest.raises(PlacementError, match="failed to place after retry") as exc_info:
+                await placer.place_tiles(move, ["A", "B"])
+            assert not isinstance(exc_info.value, CoordinateDriftError)
+
+    @pytest.mark.asyncio
     async def test_place_tiles_no_rack_tiles_skips(self):
         """Move with no rack tiles consumed results in no drags."""
         placer, page = _make_placer()
@@ -196,6 +317,135 @@ class TestPlaceTiles:
             await placer.place_tiles(move, ["B", "C"])
 
         assert page.mouse.down.call_count == 0
+
+
+class TestAnchorProbe:
+    """Tests for the pre-flight anchor occupancy probe."""
+
+    def test_v_range_empty_uniform_image(self):
+        """A uniform-color image yields V_range == 0 at any cell."""
+        img = np.full((768, 1545, 3), (210, 230, 250), dtype=np.uint8)
+        assert _cell_v_range(img, 5, 5) == 0
+
+    def test_v_range_high_at_painted_cell(self):
+        """A cell painted with a black/white split yields V_range == 255."""
+        img_bytes = _make_board_png({(5, 13)})
+        img = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
+        assert _cell_v_range(img, 5, 13) >= 200
+
+    def test_v_range_zero_at_unpainted_cell(self):
+        """A cell *not* in the painted set still reads as empty."""
+        img_bytes = _make_board_png({(5, 13)})
+        img = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
+        assert _cell_v_range(img, 7, 7) == 0
+
+    def test_check_anchors_passes_when_all_cells_match(self):
+        """Probe accepts the move when every anchor is occupied and every
+        rack-tile destination is empty."""
+        # Anchor at (5,13); rack tiles at (5,14) and (5,15)
+        img_bytes = _make_board_png({(5, 13)})
+        move = _make_move(
+            "ABC", "H",
+            [
+                TileUse(row=5, col=13, letter="A", is_blank=False, from_rack=False),
+                TileUse(row=5, col=14, letter="B", is_blank=False, from_rack=True),
+                TileUse(row=5, col=15, letter="C", is_blank=False, from_rack=True),
+            ],
+        )
+        assert _check_move_anchors(img_bytes, move) is None
+
+    def test_check_anchors_rejects_empty_anchor(self):
+        """Engine claims an anchor exists, but the live cell is empty."""
+        # Painted cells: only (5, 14). Engine's anchor at (5, 13) is empty.
+        img_bytes = _make_board_png({(5, 14)})
+        move = _make_move(
+            "AB", "H",
+            [
+                TileUse(row=5, col=13, letter="A", is_blank=False, from_rack=False),
+                TileUse(row=5, col=14, letter="B", is_blank=False, from_rack=True),
+            ],
+        )
+        result = _check_move_anchors(img_bytes, move)
+        assert result is not None
+        assert "anchor 'A'" in result
+        assert "(5,13)" in result
+
+    def test_check_anchors_rejects_occupied_destination(self):
+        """Engine plans to place a rack tile where one already exists."""
+        # (5, 14) is already occupied. Engine's plan tries to place there.
+        img_bytes = _make_board_png({(5, 13), (5, 14)})
+        move = _make_move(
+            "AB", "H",
+            [
+                TileUse(row=5, col=13, letter="A", is_blank=False, from_rack=False),
+                TileUse(row=5, col=14, letter="B", is_blank=False, from_rack=True),
+            ],
+        )
+        result = _check_move_anchors(img_bytes, move)
+        assert result is not None
+        assert "rack-tile destination" in result
+        assert "(5,14)" in result
+
+    def test_check_anchors_returns_none_on_decode_failure(self):
+        """A garbage screenshot does not block placement — the probe yields
+        to the downstream verifier rather than producing a false positive."""
+        move = _make_move("A", "H", _h_tiles("A", row=0, start_col=0))
+        assert _check_move_anchors(b"not-a-png", move) is None
+
+
+class TestPlaceTilesPreflight:
+    @pytest.mark.asyncio
+    async def test_place_tiles_aborts_on_missing_anchor(self):
+        """When the pre-flight probe sees no tile at an anchor cell, place_tiles
+        raises CoordinateDriftError without making a single placement click."""
+        placer, page = _make_placer()
+        # Anchor at (5,13); rack tile at (5,14). Live board has neither.
+        empty_board = _make_board_png(set())
+        move = _make_move(
+            "AB", "H",
+            [
+                TileUse(row=5, col=13, letter="A", is_blank=False, from_rack=False),
+                TileUse(row=5, col=14, letter="B", is_blank=False, from_rack=True),
+            ],
+        )
+
+        bbox = {"x": 0, "y": 0, "width": 1545, "height": 768}
+        with (
+            patch.object(placer, "_get_canvas_bbox", new_callable=AsyncMock, return_value=bbox),
+            patch("src.browser.tile_placer.capture_canvas", new_callable=AsyncMock, return_value=empty_board),
+            patch("src.browser.tile_placer.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            with pytest.raises(CoordinateDriftError, match="Pre-flight anchor probe"):
+                await placer.place_tiles(move, ["B", "C"])
+
+        # Crucial: no placement click should have happened
+        assert page.mouse.click.call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_place_tiles_proceeds_when_anchors_match(self):
+        """When the live board matches the move, place_tiles continues to
+        click placement as normal."""
+        placer, page = _make_placer()
+        live_board = _make_board_png({(5, 13)})
+        move = _make_move(
+            "AB", "H",
+            [
+                TileUse(row=5, col=13, letter="A", is_blank=False, from_rack=False),
+                TileUse(row=5, col=14, letter="B", is_blank=False, from_rack=True),
+            ],
+        )
+
+        bbox = {"x": 0, "y": 0, "width": 1545, "height": 768}
+        with (
+            patch.object(placer, "_get_canvas_bbox", new_callable=AsyncMock, return_value=bbox),
+            patch.object(placer, "_verify_placement", new_callable=AsyncMock, return_value=True),
+            patch("src.browser.tile_placer.capture_canvas", new_callable=AsyncMock, return_value=live_board),
+            patch("src.browser.tile_placer.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            await placer.place_tiles(move, ["B", "C"])
+
+        # 1 rack tile = 2 clicks (select rack + place on board)
+        assert page.mouse.click.call_count == 2
 
 
 class TestPlaceMove:
@@ -341,6 +591,42 @@ class TestPlaceMove:
             result = await placer.place_move([move1, move2], ["A", "B", "C", "D"])
 
         assert result is not None
+
+    @pytest.mark.asyncio
+    async def test_place_move_short_circuits_on_coordinate_drift(self):
+        """CoordinateDriftError on the first candidate aborts the whole loop:
+        no second candidate is tried, no SWAP is performed, place_move returns
+        None so the orchestrator can re-vision."""
+        placer, page = _make_placer()
+        tiles1 = _h_tiles("AB", row=0, start_col=0)
+        tiles2 = _h_tiles("CD", row=1, start_col=0)
+        move1 = _make_move("AB", "H", tiles1)
+        move2 = _make_move("CD", "H", tiles2)
+
+        place_tiles_mock = AsyncMock(
+            side_effect=CoordinateDriftError("first tile missed cell"),
+        )
+
+        with (
+            patch.object(placer, "place_tiles", place_tiles_mock),
+            patch.object(placer, "_get_canvas_bbox", new_callable=AsyncMock, return_value=BBOX),
+            patch.object(placer, "_click_confirm", new_callable=AsyncMock),
+            patch.object(placer, "_wait_for_acceptance", new_callable=AsyncMock, return_value=True),
+            patch.object(placer, "_recall_tiles", new_callable=AsyncMock) as mock_recall,
+            patch.object(placer, "_tile_swap", new_callable=AsyncMock) as mock_swap,
+            patch("src.browser.tile_placer.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            result = await placer.place_move(
+                [move1, move2], ["A", "B", "C", "D"], swap_on_fail=True,
+            )
+
+        assert result is None
+        # Only the first candidate was attempted before the short-circuit.
+        assert place_tiles_mock.call_count == 1
+        # Recall ran (to clear any partial staging).
+        mock_recall.assert_called_once()
+        # No SWAP — drift means re-vision, not give-up-and-swap.
+        mock_swap.assert_not_called()
 
 
 class TestBlankTileDialog:

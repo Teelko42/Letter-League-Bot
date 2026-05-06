@@ -109,6 +109,83 @@ def _add_reference_markers(
     return board_img
 
 
+def _refine_board_bbox(
+    hsv: np.ndarray,
+    grid_x: int,
+    grid_y: int,
+    grid_w: int,
+    grid_h: int,
+) -> tuple[int, int, int, int]:
+    """Tighten ``(grid_x, grid_y, grid_w, grid_h)`` to the actual board edges.
+
+    The fraction-based crop is correct when the input is the bare game canvas
+    at the calibrated aspect ratio (autoplay screenshots). For /analyze the
+    user may upload a whole-window Discord screenshot where the canvas is a
+    sub-region; the fractions then over-estimate the board on one or both
+    axes. Snap each edge inward until at least ``MIN_PEACH_PER_EDGE_FRAC``
+    of the perpendicular edge contains peach pixels — that's where the
+    actual board starts.
+
+    Search up to ``BBOX_REFINE_MARGIN_FRAC`` of each side both inward and
+    outward of the fraction-based estimate, so we can correct over- or
+    under-shoots without drifting into surrounding UI.
+    """
+    img_h, img_w = hsv.shape[:2]
+
+    BBOX_REFINE_MARGIN_FRAC = 0.25  # search up to ±25% of each side
+    MIN_PEACH_PER_EDGE_FRAC = 0.20  # an "edge" row/col has ≥20% peach
+
+    margin_x = int(grid_w * BBOX_REFINE_MARGIN_FRAC)
+    margin_y = int(grid_h * BBOX_REFINE_MARGIN_FRAC)
+
+    search_x0 = max(0, grid_x - margin_x)
+    search_y0 = max(0, grid_y - margin_y)
+    search_x1 = min(img_w, grid_x + grid_w + margin_x)
+    search_y1 = min(img_h, grid_y + grid_h + margin_y)
+
+    region = hsv[search_y0:search_y1, search_x0:search_x1]
+    mask = cv2.inRange(region, BOARD_HSV_LOWER, BOARD_HSV_UPPER)
+    rh, rw = mask.shape
+
+    # Per-row and per-col peach counts (in pixels)
+    row_counts = (mask > 0).sum(axis=1)
+    col_counts = (mask > 0).sum(axis=0)
+
+    row_thresh = int(rw * MIN_PEACH_PER_EDGE_FRAC)
+    col_thresh = int(rh * MIN_PEACH_PER_EDGE_FRAC)
+
+    rows_with_board = np.where(row_counts >= row_thresh)[0]
+    cols_with_board = np.where(col_counts >= col_thresh)[0]
+
+    if rows_with_board.size == 0 or cols_with_board.size == 0:
+        # Couldn't identify a clear board run — keep the fraction-based crop.
+        return grid_x, grid_y, grid_w, grid_h
+
+    new_y = search_y0 + int(rows_with_board[0])
+    new_h = int(rows_with_board[-1] - rows_with_board[0] + 1)
+    new_x = search_x0 + int(cols_with_board[0])
+    new_w = int(cols_with_board[-1] - cols_with_board[0] + 1)
+
+    # Sanity guard: if refinement would shrink the crop drastically (>60% in
+    # either axis) we likely picked up only a sub-region of the board (e.g.
+    # one row of multiplier squares); fall back to the fraction-based crop.
+    if new_w < grid_w * 0.4 or new_h < grid_h * 0.4:
+        logger.debug(
+            "Bbox refinement rejected: tighter bbox {}x{} too small vs fraction "
+            "estimate {}x{}; using fraction-based crop.",
+            new_w, new_h, grid_w, grid_h,
+        )
+        return grid_x, grid_y, grid_w, grid_h
+
+    if (new_x, new_y, new_w, new_h) != (grid_x, grid_y, grid_w, grid_h):
+        logger.info(
+            "Bbox refined: ({},{}) {}x{} -> ({},{}) {}x{}",
+            grid_x, grid_y, grid_w, grid_h,
+            new_x, new_y, new_w, new_h,
+        )
+    return new_x, new_y, new_w, new_h
+
+
 def preprocess_screenshot(img_bytes: bytes) -> bytes:
     """Crop the board grid using known position fractions, upscale, and return PNG.
 
@@ -160,11 +237,6 @@ def preprocess_screenshot(img_bytes: bytes) -> bytes:
     grid_w = min(grid_w, img_w - grid_x)
     grid_h = min(grid_h, img_h - grid_y)
 
-    logger.debug(
-        "Grid crop: ({},{}) {}×{} from {}×{} canvas",
-        grid_x, grid_y, grid_w, grid_h, img_w, img_h,
-    )
-
     # Step 2: Validate — check that the grid area has enough peach background
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
     grid_roi = hsv[grid_y:grid_y + grid_h, grid_x:grid_x + grid_w]
@@ -177,6 +249,27 @@ def preprocess_screenshot(img_bytes: bytes) -> bytes:
             f"Board region not detected — peach ratio {peach_ratio:.1%} is below "
             f"threshold {MIN_BOARD_PEACH_RATIO:.0%}. This may not be a game screenshot.",
         )
+
+    # Step 2b: Refine the crop to the actual board edges.
+    # The fixed fractions assume the input is the bare game canvas at the calibrated
+    # aspect ratio. /analyze accepts arbitrary screenshots (e.g. the whole Discord
+    # window) where the canvas occupies an unknown sub-region — applying the
+    # fractions to the full image then makes the crop too large in one or both
+    # axes, and the gridlines drawn at 19×27 across that oversized crop end up
+    # denser than the actual game cells. Vision then reports tile coordinates
+    # against the wrong grid.
+    #
+    # Find the actual board edges by scanning the *outer* margin around the
+    # fraction-based ROI for peach board pixels and snapping to the tightest
+    # bounding box of the contiguous peach region.
+    grid_x, grid_y, grid_w, grid_h = _refine_board_bbox(
+        hsv, grid_x, grid_y, grid_w, grid_h
+    )
+
+    logger.debug(
+        "Grid crop: ({},{}) {}×{} from {}×{} canvas",
+        grid_x, grid_y, grid_w, grid_h, img_w, img_h,
+    )
 
     # Step 3: Crop to grid region + rack padding
     rack_pad = int(grid_h * RACK_PADDING_RATIO)

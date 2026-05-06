@@ -7,18 +7,20 @@ import time
 import anthropic
 from loguru import logger
 
-from src.vision.errors import EXTRACTION_FAILED, VisNError
+from src.vision.errors import API_OVERLOADED, EXTRACTION_FAILED, VisNError
 from src.vision.schema import BOARD_SCHEMA
 
 # Lazy-initialised async client.  Created on first API call so that
 # load_dotenv() has already populated ANTHROPIC_API_KEY in the environment.
+# max_retries=4 (vs SDK default 2) to ride out short Anthropic 529 spikes
+# before surfacing the error to the user.
 _client: anthropic.AsyncAnthropic | None = None
 
 
 def _get_client() -> anthropic.AsyncAnthropic:
     global _client
     if _client is None:
-        _client = anthropic.AsyncAnthropic()
+        _client = anthropic.AsyncAnthropic(max_retries=4)
     return _client
 
 # Prompt sent to Claude Vision for board state extraction.
@@ -80,7 +82,7 @@ async def call_vision_api(
 ) -> dict:
     """Call Claude Vision API with structured output to extract board state.
 
-    Encodes the image as base64, sends it to claude-sonnet-4-6 with the
+    Encodes the image as base64, sends it to claude-opus-4-7 with the
     extraction prompt, and returns the parsed JSON response.
 
     Args:
@@ -115,7 +117,7 @@ async def call_vision_api(
     start = time.monotonic()
     try:
         response = await _get_client().messages.create(
-            model="claude-sonnet-4-6",
+            model="claude-opus-4-7",
             max_tokens=4096,
             messages=[
                 {
@@ -143,6 +145,9 @@ async def call_vision_api(
                 }
             },
         )
+    except anthropic.APIStatusError as exc:
+        code = API_OVERLOADED if exc.status_code == 529 else EXTRACTION_FAILED
+        raise VisNError(code, str(exc)) from exc
     except anthropic.APIError as exc:
         raise VisNError(EXTRACTION_FAILED, str(exc)) from exc
     except Exception as exc:

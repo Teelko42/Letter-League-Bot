@@ -18,6 +18,7 @@ from src.browser.turn_detector import (
     BANNER_HSV_LOWER,
     BANNER_HSV_UPPER,
     BANNER_ROI_FRAC,
+    BANNER_ROI_X_FRAC,
     GAME_OVER_BOARD_THRESHOLD,
     GAME_READY_TIMEOUT_S,
     IDLE_THRESHOLD_S,

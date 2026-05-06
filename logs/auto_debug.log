@@ -1,8 +1,7 @@
-auto_debug run started 2026-05-04 13:58:26
-[auto_debug 13:58:26] pre-existing dirty .py files (excluded from smoke): ['scripts/auto_debug.py', 'src/browser/navigator.py', 'src/browser/tile_placer.py', 'src/vision/__init__.py']
-[auto_debug 13:58:26] === iteration 1/10 ===
-[auto_debug 13:58:26] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 10 --mode wild  (timeout=1800s)
-[auto_debug 14:27:09] run finished: exit=0  duration=1722.3s  sig=3f00468e8ebc  placed=3  skipped=7  terminal=True
-[auto_debug 14:27:09] Clean exit but only 3 word(s) placed (need >= 8) — treating as partial and continuing.
-[auto_debug 14:27:09] wrote context bundle -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_001.md
-[auto_debug 14:27:09] invoking claude (timeout=900s, acceptEdits)
+auto_debug run started 2026-05-05 17:36:08
+[auto_debug 17:36:08] pre-existing dirty .py files (excluded from smoke): ['scripts/extract_info_images.py', 'scripts/tune_occupancy_probe.py', 'src/browser/tile_placer.py', 'src/browser/turn_detector.py', 'tests/test_tile_placer.py', 'tests/test_turn_detector.py']
+[auto_debug 17:36:08] === iteration 1/10 ===
+[auto_debug 17:36:08] launching: C:\Users\Ninja\AppData\Local\Programs\Python\Python313\python.exe -m scripts.autoplay_headless --max-turns 5 --mode wild  (timeout=1800s)
+[auto_debug 17:43:31] run finished: exit=1  duration=443.2s  sig=c15f3f6b3caf  placed=0  skipped=2  terminal=False
+[auto_debug 17:43:32] wrote context bundle -> C:/Github/Letter-League-Bot/logs/auto_debug_iter_001.md
+[auto_debug 17:43:32] invoking claude (timeout=900s, acceptEdits)

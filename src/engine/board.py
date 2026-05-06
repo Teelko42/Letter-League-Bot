@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
+from src.engine import rejected_words
 from src.engine.models import Cell, MultiplierType
 from src.engine.tiles import ALPHABET
 
@@ -187,7 +188,13 @@ class Board:
                     valid: set[str] = set()
                     for letter in ALPHABET:
                         word = prefix + letter + suffix
-                        if gaddag.is_valid_word(word):
+                        # Reject letters that would form a cross-word the live
+                        # game has previously rejected (Letter League's
+                        # dictionary is stricter than the GADDAG, e.g. SOWPODS-
+                        # only words like LOWP). Without this, the engine
+                        # generates a play whose main word is valid but whose
+                        # cross-word will be rejected at submission time.
+                        if gaddag.is_valid_word(word) and not rejected_words.is_rejected(word):
                             valid.add(letter)
                     result[(r, c)] = valid
 

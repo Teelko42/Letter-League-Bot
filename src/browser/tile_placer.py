@@ -108,6 +108,19 @@ class PlacementError(Exception):
     """Raised when tile placement fails after retries."""
 
 
+class CoordinateDriftError(PlacementError):
+    """Placement failed with the 'global canvas changed but target cell didn't' signature.
+
+    The mouse click registered (rack tile highlighted, score banner repainted,
+    PLAY label changed) but no tile landed in or near the targeted cell. Almost
+    always means the engine's (row, col) does not correspond to the live
+    board's cell — i.e. vision drift cascaded into the placer. Trying further
+    candidates from the same vision pass will hit the same misaligned cells,
+    so the placer raises this to short-circuit the candidate loop and let the
+    orchestrator re-vision before its next attempt.
+    """
+
+
 def _canvas_unchanged(before: bytes, after: bytes, threshold: float = 0.15) -> bool:
     """Return True when two PNG captures are nearly identical.
 
@@ -131,6 +144,110 @@ def _canvas_unchanged(before: bytes, after: bytes, threshold: float = 0.15) -> b
         return False
     diff = float(np.mean(np.abs(img_b.astype(np.int32) - img_a.astype(np.int32))))
     return diff <= threshold
+
+
+# Pre-flight anchor probe. When the engine plans a move it cites cells that
+# are *already* occupied by committed tiles (the move's anchors — TileUse with
+# from_rack=False) and cells that must be empty (TileUse with from_rack=True).
+# Vision drift produces moves whose anchor cells aren't actually occupied on
+# the live board; placing such a move always rejects and burns ~30 s. Probing
+# the cells before any click catches drift without cost.
+#
+# Heuristic (tuned offline against debug/tile_placer/pre_play_*.png):
+# committed tiles render with a coloured background AND a contrasting letter
+# glyph, so a cell-centred sample yields V_range > 100 (typically ~224).
+# Empty cells (peach board background or any of the 2L/3L/2W/3W multipliers)
+# are nearly uniform with V_range == 0 when isolated.
+#
+# Sample fraction is 0.5 (not full cell) because committed tiles render with
+# a small "DW²" multiplier badge that protrudes a few pixels above the cell's
+# nominal top edge, and a drop shadow that bleeds a few pixels into the cell
+# below. A 90% sample of a *neighbouring* empty cell would catch that bleed
+# and produce V_range up to 140, falsely flagging the empty cell as occupied
+# (and rejecting every candidate the engine planned that touched such a
+# cell). At 0.5 the worst empty-cell-with-neighbour reading is V_range≈70
+# (the drop-shadow case below a tile); the wide ambiguous band (50-150) gives
+# margin against borderline cases without false anchor rejections in
+# multi-word states where vision may report tiles slightly offset from where
+# they actually render.
+_PROBE_SAMPLE_FRAC = 0.5
+_V_RANGE_OCCUPIED = 150  # cell is occupied if V.max - V.min > this in the sample
+_V_RANGE_EMPTY = 50      # cell is empty if V.max - V.min <= this; in-between is ambiguous
+
+
+def _cell_v_range(img: np.ndarray, row: int, col: int) -> int:
+    """Return the V (HSV brightness) range in a 90% cell-sized sample at (row, col).
+
+    Args:
+        img: BGR image of the iframe screenshot.
+        row: Zero-based board row.
+        col: Zero-based board column.
+
+    Returns:
+        V.max() - V.min() over the sample crop, or 0 if the crop falls
+        outside the image bounds.
+    """
+    h, w = img.shape[:2]
+    cx = (GRID_X0_FRAC + (col + 0.5) * CELL_W_FRAC) * w
+    cy = (GRID_Y0_FRAC + (row + 0.5) * CELL_H_FRAC) * h
+    half_w = int(CELL_W_FRAC * w * _PROBE_SAMPLE_FRAC * 0.5)
+    half_h = int(CELL_H_FRAC * h * _PROBE_SAMPLE_FRAC * 0.5)
+    x0, x1 = max(0, int(cx) - half_w), min(w, int(cx) + half_w)
+    y0, y1 = max(0, int(cy) - half_h), min(h, int(cy) + half_h)
+    if x1 <= x0 or y1 <= y0:
+        return 0
+    crop = img[y0:y1, x0:x1]
+    v = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)[:, :, 2]
+    return int(v.max()) - int(v.min())
+
+
+def _check_move_anchors(img_bytes: bytes, move: Move) -> str | None:
+    """Verify the move's anchor and rack-tile cells match the live board.
+
+    For each tile in ``move.tiles_used``:
+      * ``from_rack=False`` (anchor) — the engine believes a committed tile
+        already sits at this position. The cell must register as occupied
+        (V_range > _V_RANGE_OCCUPIED).
+      * ``from_rack=True``  (destination) — a rack tile is about to be placed
+        here. The cell must register as empty (V_range <= _V_RANGE_EMPTY).
+
+    Cells whose V_range falls between the two thresholds are treated as
+    ambiguous and ignored — the heuristic refuses to pronounce the engine
+    wrong on borderline pixel readings.
+
+    Args:
+        img_bytes: PNG screenshot bytes from ``capture_canvas``.
+        move:      The Move about to be placed.
+
+    Returns:
+        ``None`` if every probed cell agrees with the engine. Otherwise a
+        human-readable description of the first disagreement, suitable for
+        a CoordinateDriftError message.
+    """
+    arr = np.frombuffer(img_bytes, dtype=np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        return None  # decode failure; don't gate placement on a bad screenshot
+
+    for tile in move.tiles_used:
+        vr = _cell_v_range(img, tile.row, tile.col)
+        if not tile.from_rack:
+            # Anchor must be occupied. Only flag if unambiguously empty.
+            if vr <= _V_RANGE_EMPTY:
+                return (
+                    f"anchor '{tile.letter}' at ({tile.row},{tile.col}) "
+                    f"is empty on the live board (V_range={vr}); engine "
+                    f"believes a committed tile is here"
+                )
+        else:
+            # Rack-tile destination must be empty. Only flag if unambiguously occupied.
+            if vr > _V_RANGE_OCCUPIED:
+                return (
+                    f"rack-tile destination ({tile.row},{tile.col}) is "
+                    f"already occupied (V_range={vr}); engine plans to "
+                    f"place '{tile.letter}' here"
+                )
+    return None
 
 
 def _is_blank_dialog_open(img_bytes: bytes) -> bool:
@@ -380,6 +497,11 @@ class TilePlacer:
     def __init__(self, page: Any) -> None:
         self._page = page
         self._bbox: dict | None = None  # stashed by place_move for in-frame clicks
+        # Last verify diffs, exposed for the drift detector in place_tiles.
+        # Initialised to +inf so that mocked _verify_placement in unit tests
+        # (which never updates these) is treated as "no drift signal".
+        self._last_global_diff: float = float("inf")
+        self._last_local_diff: float = float("inf")
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -604,28 +726,46 @@ class TilePlacer:
         logger.debug("Blank dialog dismiss pixel diff: {:.4f}", diff)
         return diff > 0.10
 
-    async def _verify_placement(self, before_bytes: bytes) -> bool:
+    async def _verify_placement(
+        self,
+        before_bytes: bytes,
+        target_local_xy: tuple[float, float] | None = None,
+        cell_w_px: float | None = None,
+        cell_h_px: float | None = None,
+    ) -> bool:
         """Verify a tile was placed by comparing before/after screenshots.
 
-        Captures a new screenshot and computes the mean absolute pixel
-        difference against the pre-drag screenshot. A difference > 0.10
-        indicates the canvas changed (tile landed).
+        Two-gate check when ``target_local_xy`` is provided:
+          1. Global mean abs diff > 0.10 (the original gate — confirms the
+             canvas changed at all).
+          2. Cell-region mean abs diff > 1.0, where the region is a 1.5×
+             cell-sized crop centred on the target cell.
 
-        The threshold is deliberately low because a single tile placement only
-        affects ~2 small regions (board cell + rack slot) out of the full
-        ~1545x768 image. A successful placement onto an already-colored
-        multiplier cell can produce a mean diff as low as 0.10–0.14, while a
-        no-op drag (e.g. rack slot already empty from a prior successful
-        attempt) produces ~0.05–0.08. The 0.10 cutoff cleanly separates these
-        regimes — a stricter 0.15 was empirically rejecting real placements
-        and triggering false retry-failure cascades.
+        The cell-local gate exists because a global diff is fooled when a
+        drag is rejected and the tile snaps back to the rack: the rack
+        slot redraws briefly, the score banner can update, and the PLAY
+        button label changes — all of which inflate the global diff while
+        the target cell remains untouched. A real landing produces a large
+        local diff because an empty multiplier square (saturated colour +
+        white "2L"/"3W" text) is replaced by a tile (pastel background +
+        large dark letter + small score number).
+
+        Falls back to the global-only check if no target is given (used by
+        the blank-letter dialog dismissal path, which has no specific cell
+        to inspect).
 
         Args:
             before_bytes: PNG screenshot bytes captured before the drag.
+            target_local_xy: Iframe-local (x, y) of the target cell centre,
+                in pixels. ``None`` to skip the cell-local gate.
+            cell_w_px: Cell width in screenshot pixels. Required when
+                ``target_local_xy`` is given.
+            cell_h_px: Cell height in screenshot pixels. Required when
+                ``target_local_xy`` is given.
 
         Returns:
-            ``True`` if the canvas changed (diff > 0.10), ``False`` otherwise
-            or if either image fails to decode.
+            ``True`` if both gates pass (or the global gate passes when no
+            target is given). ``False`` otherwise, or if image decode fails.
         """
         after_bytes = await capture_canvas(self._page, render_wait=False)
 
@@ -638,11 +778,46 @@ class TilePlacer:
 
         if before_img is None or after_img is None:
             logger.warning("_verify_placement: image decode failed — treating as unverified")
+            self._last_global_diff = float("inf")
+            self._last_local_diff = float("inf")
             return False
 
-        diff = float(np.mean(np.abs(before_img.astype(np.int32) - after_img.astype(np.int32))))
-        logger.debug("Placement pixel diff: {:.4f}", diff)
-        return diff > 0.10
+        global_diff = float(
+            np.mean(np.abs(before_img.astype(np.int32) - after_img.astype(np.int32)))
+        )
+        self._last_global_diff = global_diff
+
+        if target_local_xy is None or cell_w_px is None or cell_h_px is None:
+            logger.debug("Placement pixel diff (global): {:.4f}", global_diff)
+            self._last_local_diff = float("inf")
+            return global_diff > 0.10
+
+        h_img, w_img = before_img.shape[:2]
+        cx, cy = target_local_xy
+        half_w = cell_w_px * 0.75
+        half_h = cell_h_px * 0.75
+        x0 = max(0, int(cx - half_w))
+        y0 = max(0, int(cy - half_h))
+        x1 = min(w_img, int(cx + half_w))
+        y1 = min(h_img, int(cy + half_h))
+        if x1 <= x0 or y1 <= y0:
+            logger.warning(
+                "Placement target ({:.0f},{:.0f}) outside screenshot {}x{} — "
+                "falling back to global gate (diff={:.4f})",
+                cx, cy, w_img, h_img, global_diff,
+            )
+            self._last_local_diff = float("inf")
+            return global_diff > 0.10
+
+        before_crop = before_img[y0:y1, x0:x1].astype(np.int32)
+        after_crop = after_img[y0:y1, x0:x1].astype(np.int32)
+        local_diff = float(np.mean(np.abs(before_crop - after_crop)))
+        self._last_local_diff = local_diff
+        logger.debug(
+            "Placement pixel diff: global={:.4f} local={:.4f} cell=({:.0f},{:.0f}) crop={}x{}",
+            global_diff, local_diff, cx, cy, x1 - x0, y1 - y0,
+        )
+        return global_diff > 0.10 and local_diff > 1.0
 
     # ------------------------------------------------------------------
     # Public API
@@ -653,20 +828,27 @@ class TilePlacer:
 
         Orchestration steps:
           1. Fetch canvas bounding box and build a ``CoordMapper``.
-          2. Retrieve rack tiles from the move.
-          3. Assign each rack tile to a rack slot index.
-          4. Sort placements in word-spelling order (left-to-right for
+          2. Pre-flight anchor probe: capture the canvas and verify every
+             ``from_rack=False`` cell already has a committed tile, and every
+             ``from_rack=True`` cell is empty. Aborts with
+             ``CoordinateDriftError`` on mismatch — saves ~30 s of
+             click-then-reject when vision drift produced an impossible move.
+          3. Retrieve rack tiles from the move.
+          4. Assign each rack tile to a rack slot index.
+          5. Sort placements in word-spelling order (left-to-right for
              horizontal; top-to-bottom for vertical).
-          5. For each tile: compute jittered source + target coordinates,
+          6. For each tile: compute jittered source + target coordinates,
              capture a before screenshot, drag the tile, verify placement.
              Retry once on failure; raise ``PlacementError`` if retry fails.
-          6. Sleep 1–3 seconds between placements for human-like pacing.
+          7. Sleep 1–3 seconds between placements for human-like pacing.
 
         Args:
             move: The ``Move`` to execute.
             rack: Current rack as a list of letter strings (``'?'`` for blank).
 
         Raises:
+            CoordinateDriftError: If the pre-flight anchor probe shows the
+                live board doesn't match the engine's view of the move.
             PlacementError: If any tile placement fails after one retry.
             ValueError: If rack assignment fails (tile not in rack).
         """
@@ -675,10 +857,29 @@ class TilePlacer:
         bbox = await self._get_canvas_bbox()
         mapper = CoordMapper(bbox)
 
+        # Cell dimensions in screenshot pixels — used by _verify_placement for
+        # the cell-local crop. Computed once so the per-tile call site stays
+        # quiet.
+        cell_w_px = CELL_W_FRAC * bbox["width"]
+        cell_h_px = CELL_H_FRAC * bbox["height"]
+
         rack_tiles: list[TileUse] = move.rack_tiles_consumed()
         if not rack_tiles:
             logger.info("No rack tiles to place for move '{}'", move.word)
             return
+
+        # Pre-flight anchor probe. If the move's anchor cells (committed tiles
+        # the engine plans to build off of) aren't actually occupied on the
+        # live board, vision drift produced this candidate and every later
+        # candidate from the same vision pass shares the same wrong frame.
+        # Aborting here saves the ~30 s the placement+rejection cycle would
+        # otherwise burn.
+        preflight_bytes = await capture_canvas(self._page, render_wait=False)
+        mismatch = _check_move_anchors(preflight_bytes, move)
+        if mismatch is not None:
+            raise CoordinateDriftError(
+                f"Pre-flight anchor probe rejected '{move.word}': {mismatch}"
+            )
 
         slot_indices = assign_rack_indices(rack, rack_tiles)
 
@@ -707,6 +908,11 @@ class TilePlacer:
                 by,
             )
 
+            # Iframe-local target for the cell-region verify crop. The
+            # screenshot from capture_canvas is the iframe element, so the
+            # bbox.x/.y origin must be subtracted from viewport coords.
+            target_local = (bx - bbox["x"], by - bbox["y"])
+
             # Place tile via click-select, click-place with verification.
             # Capture a before screenshot, drag the tile, then verify the
             # canvas changed.  Retry once on failure with fresh jitter.
@@ -714,7 +920,17 @@ class TilePlacer:
             await self._drag_tile(rx, ry, bx, by)
             await asyncio.sleep(0.3)  # Let the game register the placement.
 
-            placed = await self._verify_placement(before_bytes)
+            placed = await self._verify_placement(
+                before_bytes,
+                target_local_xy=target_local,
+                cell_w_px=cell_w_px,
+                cell_h_px=cell_h_px,
+            )
+            # Snapshot the verifier's diffs immediately — the retry below will
+            # overwrite them, and we need both attempts' values to decide
+            # whether the failure looks like coordinate drift.
+            attempt1_global = self._last_global_diff
+            attempt1_local = self._last_local_diff
             if not placed:
                 logger.warning(
                     "Tile '{}' placement not verified — retrying with fresh jitter",
@@ -722,12 +938,40 @@ class TilePlacer:
                 )
                 rx2, ry2 = jitter(*mapper.rack_tile_px(slot_idx))
                 bx2, by2 = jitter(*mapper.board_cell_px(tile.row, tile.col))
+                target_local2 = (bx2 - bbox["x"], by2 - bbox["y"])
                 before_bytes = await capture_canvas(self._page, render_wait=False)
                 await self._drag_tile(rx2, ry2, bx2, by2)
                 await asyncio.sleep(0.3)
 
-                placed = await self._verify_placement(before_bytes)
+                placed = await self._verify_placement(
+                    before_bytes,
+                    target_local_xy=target_local2,
+                    cell_w_px=cell_w_px,
+                    cell_h_px=cell_h_px,
+                )
+                attempt2_global = self._last_global_diff
+                attempt2_local = self._last_local_diff
                 if not placed:
+                    # Coordinate-drift signature: the click registered (rack
+                    # repaints / score banner / PLAY label all push global_diff
+                    # above the success threshold) but the target cell crop is
+                    # essentially untouched. When this fires twice on the very
+                    # first tile of a move, every later tile and every later
+                    # candidate from the same vision pass will hit the same
+                    # misaligned cells, so we abort the whole move and let the
+                    # caller (place_move) re-vision instead of burning ~30 s
+                    # per additional candidate.
+                    drift1 = attempt1_global > 0.10 and attempt1_local < 1.0
+                    drift2 = attempt2_global > 0.10 and attempt2_local < 1.0
+                    if ordinal == 0 and drift1 and drift2:
+                        raise CoordinateDriftError(
+                            f"Tile '{tile.letter}' at ({tile.row},{tile.col}): "
+                            f"two consecutive clicks failed to land in the "
+                            f"target cell (local diffs {attempt1_local:.3f}, "
+                            f"{attempt2_local:.3f}; canvas changed by "
+                            f"{attempt1_global:.3f}, {attempt2_global:.3f}) — "
+                            f"engine coordinates do not match the live board"
+                        )
                     raise PlacementError(
                         f"Tile '{tile.letter}' at ({tile.row},{tile.col}) failed "
                         f"to place after retry"
@@ -1073,6 +1317,26 @@ class TilePlacer:
 
             try:
                 await self.place_tiles(move, rack)
+            except CoordinateDriftError as exc:
+                # First tile failed twice with the "click missed cell"
+                # signature — every other candidate from this vision pass
+                # shares the same coordinate frame and will fail the same
+                # way. Recall whatever (if anything) staged and bail out so
+                # the orchestrator re-visions before trying again.
+                logger.error(
+                    "Coordinate drift on '{}' (attempt {}/{}): {} — aborting "
+                    "candidate list to trigger re-vision",
+                    move.word, attempt_num, attempt_limit, exc,
+                )
+                try:
+                    bbox = await self._get_canvas_bbox()
+                    mapper = CoordMapper(bbox)
+                    await self._recall_tiles(mapper, attempt_num=attempt_num)
+                except Exception as recall_exc:
+                    logger.warning(
+                        "Recall after CoordinateDriftError failed: {}", recall_exc,
+                    )
+                return None
             except (PlacementError, ValueError) as exc:
                 logger.error(
                     "Tile placement failed for '{}' (attempt {}): {}",

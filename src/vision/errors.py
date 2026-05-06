@@ -3,6 +3,7 @@ from __future__ import annotations
 # Error code constants
 INVALID_SCREENSHOT = "INVALID_SCREENSHOT"
 EXTRACTION_FAILED = "EXTRACTION_FAILED"
+API_OVERLOADED = "API_OVERLOADED"
 VALIDATION_FAILED = "VALIDATION_FAILED"
 
 
@@ -10,7 +11,8 @@ class VisNError(Exception):
     """Typed error for the vision pipeline.
 
     Attributes:
-        code: One of INVALID_SCREENSHOT, EXTRACTION_FAILED, VALIDATION_FAILED.
+        code: One of INVALID_SCREENSHOT, EXTRACTION_FAILED, API_OVERLOADED,
+            VALIDATION_FAILED.
         message: Human-readable description of the error.
     """
 

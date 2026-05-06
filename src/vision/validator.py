@@ -83,8 +83,16 @@ def correct_positions(data: dict) -> None:
     best_dr, best_dc = 0, 0
     best_matches = curr_matches
 
-    for dr in range(-3, 4):
-        for dc in range(-3, 4):
+    # Restrict to ±1 cell shifts: vision's column reading is reliable (the
+    # horizontal cell-fraction calibration is tight) and row drift in
+    # practice is at most ±1 cell. Large shifts (±2 or ±3) only ever fire
+    # when the multiplier-match algorithm gets a coincidental hit on the
+    # wrong cells — observed case: BOPS+EE board with vision reporting
+    # multipliers based on tile-highlight color rather than the underlying
+    # square, leading to a (-1, +3) shift that moved every anchor to an
+    # empty cell, blocked by the pre-flight probe with V_range=0.
+    for dr in range(-1, 2):
+        for dc in range(-1, 2):
             if dr == 0 and dc == 0:
                 continue
             matches, _ = _mult_score(dr, dc)
